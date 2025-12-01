@@ -130,6 +130,38 @@ export type Database = {
         }
         Relationships: []
       }
+      barbershops: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          slug: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          slug?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          slug?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "barbershops_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Views: {
       [_ in never]: never
