@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import { ArrowLeft, Settings as SettingsIcon, Upload, User, Image as ImageIcon } from "lucide-react";
+import { ArrowLeft, Settings as SettingsIcon, User, Image as ImageIcon, Link as LinkIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 
@@ -13,13 +13,16 @@ const Settings = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [user, setUser] = useState<any>(null);
+  const [barbershopId, setBarbershopId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState<string | null>(null);
+  const [savingSlug, setSavingSlug] = useState(false);
   const [formData, setFormData] = useState({
     barbershopName: "",
     whatsapp: "",
     avatarUrl: "",
     bannerUrl: "",
+    slug: "",
     antiFaltasEnabled: true,
     remindersEnabled: true,
   });
@@ -38,14 +41,38 @@ const Settings = () => {
       }
       
       setUser(user);
-      setFormData({
-        barbershopName: user.user_metadata?.barbershop_name || "",
-        whatsapp: user.user_metadata?.whatsapp || "",
-        avatarUrl: user.user_metadata?.avatar_url || "",
-        bannerUrl: user.user_metadata?.banner_url || "",
-        antiFaltasEnabled: true,
-        remindersEnabled: true,
-      });
+      
+      // Buscar dados da barbearia
+      const { data: barbershop } = await supabase
+        .from("barbershops")
+        .select("*")
+        .eq("user_id", user.id)
+        .single();
+      
+      if (barbershop) {
+        setBarbershopId(barbershop.id);
+        
+        // Buscar URLs das imagens
+        const { data: { publicUrl: avatarUrl } } = supabase
+          .storage
+          .from('avatars')
+          .getPublicUrl(`${user.id}/avatar.png`);
+        
+        const { data: { publicUrl: bannerUrl } } = supabase
+          .storage
+          .from('banners')
+          .getPublicUrl(`${user.id}/banner.png`);
+        
+        setFormData({
+          barbershopName: barbershop.name || "",
+          whatsapp: user.user_metadata?.whatsapp || "",
+          avatarUrl: avatarUrl,
+          bannerUrl: bannerUrl,
+          slug: barbershop.slug || "",
+          antiFaltasEnabled: true,
+          remindersEnabled: true,
+        });
+      }
     } catch (error) {
       console.error("Error checking user:", error);
       navigate("/login");
@@ -54,67 +81,143 @@ const Settings = () => {
     }
   };
 
-const handleImageUpload = async (
-  e: React.ChangeEvent<HTMLInputElement>,
-  type: 'avatar' | 'banner'
-) => {
-  if (!e.target.files || !e.target.files[0] || !user) return;
+  const handleImageUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    type: 'avatar' | 'banner'
+  ) => {
+    if (!e.target.files || !e.target.files[0] || !user) return;
 
-  const file = e.target.files[0];
-  setUploading(type);
+    const file = e.target.files[0];
+    setUploading(type);
 
-  try {
-    const bucketName = type === 'avatar' ? 'avatars' : 'banners';
-    const fileName = `${user.id}/${type}.png`; // NOME FIXO → substitui sempre
+    try {
+      const bucketName = type === 'avatar' ? 'avatars' : 'banners';
+      const fileName = `${user.id}/${type}.png`;
 
-    const { error: uploadError } = await supabase.storage
-      .from(bucketName)
-      .upload(fileName, file, {
-        upsert: true,            // <- PERMITE sobrescrever
-        contentType: file.type,  // <- garante exibição correta
+      const { error: uploadError } = await supabase.storage
+        .from(bucketName)
+        .upload(fileName, file, {
+          upsert: true,
+          contentType: file.type,
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from(bucketName)
+        .getPublicUrl(fileName);
+
+      const fieldName = type === 'avatar' ? 'avatarUrl' : 'bannerUrl';
+      setFormData(prev => ({ ...prev, [fieldName]: publicUrl }));
+
+      toast({
+        title: "Imagem enviada com sucesso!",
       });
 
-    if (uploadError) throw uploadError;
+    } catch (error: any) {
+      toast({
+        title: "Erro ao enviar imagem",
+        description: error.message,
+        variant: "destructive",
+      });
 
-    const { data: { publicUrl } } = supabase.storage
-      .from(bucketName)
-      .getPublicUrl(fileName);
+    } finally {
+      setUploading(null);
+    }
+  };
 
-    const fieldName = type === 'avatar' ? 'avatarUrl' : 'bannerUrl';
-    setFormData(prev => ({ ...prev, [fieldName]: publicUrl }));
+  const validateSlug = (slug: string): boolean => {
+    // Slug deve ter apenas letras minúsculas, números e hífens
+    const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+    return slugRegex.test(slug) && slug.length >= 3 && slug.length <= 50;
+  };
 
-    await supabase.auth.updateUser({
-      data: {
-        [`${type}_url`]: publicUrl,
+  const handleSlugChange = (value: string) => {
+    // Converter para formato válido automaticamente
+    const normalized = value
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, '-') // Substituir caracteres inválidos por hífen
+      .replace(/-+/g, '-') // Remover hífens duplicados
+      .replace(/^-|-$/g, ''); // Remover hífens do início e fim
+    
+    setFormData(prev => ({ ...prev, slug: normalized }));
+  };
+
+  const handleSaveSlug = async () => {
+    if (!user || !barbershopId) return;
+
+    if (!validateSlug(formData.slug)) {
+      toast({
+        title: "Slug inválido",
+        description: "O slug deve ter entre 3 e 50 caracteres e conter apenas letras minúsculas, números e hífens.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSavingSlug(true);
+
+    try {
+      // Verificar se o slug já existe
+      const { data: existingBarbershop } = await supabase
+        .from("barbershops")
+        .select("id")
+        .eq("slug", formData.slug)
+        .neq("id", barbershopId)
+        .single();
+
+      if (existingBarbershop) {
+        toast({
+          title: "Slug já em uso",
+          description: "Este slug já está sendo usado por outra barbearia. Escolha outro.",
+          variant: "destructive",
+        });
+        return;
       }
-    });
 
-    toast({
-      title: "Imagem enviada com sucesso!",
-    });
+      const { error } = await supabase
+        .from("barbershops")
+        .update({ slug: formData.slug })
+        .eq("id", barbershopId);
 
-  } catch (error: any) {
-    toast({
-      title: "Erro ao enviar imagem",
-      description: error.message,
-      variant: "destructive",
-    });
+      if (error) throw error;
 
-  } finally {
-    setUploading(null);
-  }
-};
+      toast({
+        title: "Slug atualizado!",
+        description: "Seu link personalizado foi atualizado com sucesso.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao atualizar slug",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setSavingSlug(false);
+    }
+  };
 
   const handleSave = async () => {
     try {
-      const { error } = await supabase.auth.updateUser({
+      // Atualizar no auth metadata
+      const { error: authError } = await supabase.auth.updateUser({
         data: {
           barbershop_name: formData.barbershopName,
           whatsapp: formData.whatsapp,
         }
       });
 
-      if (error) throw error;
+      if (authError) throw authError;
+
+      // Atualizar na tabela barbershops
+      const { error: barbershopError } = await supabase
+        .from("barbershops")
+        .update({
+          name: formData.barbershopName,
+        })
+        .eq("id", barbershopId);
+
+      if (barbershopError) throw barbershopError;
 
       toast({
         title: "Configurações salvas!",
@@ -155,8 +258,46 @@ const handleImageUpload = async (
 
       <main className="container mx-auto px-4 py-8 max-w-2xl">
         <Card className="p-8 border-border bg-card space-y-8">
-          {/* Profile Photos Section */}
+          {/* Link Personalizado */}
           <div>
+            <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+              <LinkIcon className="h-6 w-6 text-primary" />
+              Link Personalizado
+            </h2>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="slug">Seu Link Único</Label>
+                <p className="text-sm text-muted-foreground mb-2">
+                  Este será o link que seus clientes usarão para fazer agendamentos. 
+                  Use apenas letras minúsculas, números e hífens.
+                </p>
+                <div className="flex gap-2">
+                  <div className="flex-1 flex items-center gap-2 bg-background border border-border rounded-md px-3">
+                    <span className="text-muted-foreground text-sm">
+                      {window.location.origin}/book/
+                    </span>
+                    <Input
+                      id="slug"
+                      value={formData.slug}
+                      onChange={(e) => handleSlugChange(e.target.value)}
+                      placeholder="minha-barbearia"
+                      className="border-0 p-0 h-auto focus-visible:ring-0"
+                    />
+                  </div>
+                  <Button onClick={handleSaveSlug} disabled={savingSlug}>
+                    {savingSlug ? "Salvando..." : "Salvar"}
+                  </Button>
+                </div>
+                {formData.slug && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Seu link: <span className="text-primary font-medium">{window.location.origin}/book/{formData.slug}</span>
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-border pt-6">
             <h2 className="text-2xl font-bold mb-6">Fotos da Barbearia</h2>
             
             <div className="grid md:grid-cols-2 gap-6">

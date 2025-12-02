@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Calendar, Settings, TrendingUp, LogOut } from "lucide-react";
+import { Calendar, Settings, TrendingUp, LogOut, Copy, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const Dashboard = () => {
@@ -12,6 +12,8 @@ const Dashboard = () => {
   const { toast } = useToast();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [barbershopSlug, setBarbershopSlug] = useState<string>("");
+  const [barbershopName, setBarbershopName] = useState<string>("");
 
   useEffect(() => {
     checkUser();
@@ -27,6 +29,18 @@ const Dashboard = () => {
       }
       
       setUser(user);
+      
+      // Buscar slug da barbearia
+      const { data: barbershop } = await supabase
+        .from("barbershops")
+        .select("slug, name")
+        .eq("user_id", user.id)
+        .single();
+      
+      if (barbershop) {
+        setBarbershopSlug(barbershop.slug);
+        setBarbershopName(barbershop.name);
+      }
     } catch (error) {
       console.error("Error checking user:", error);
       navigate("/login");
@@ -49,6 +63,19 @@ const Dashboard = () => {
         variant: "destructive",
       });
     }
+  };
+
+  const copyBookingLink = () => {
+    const link = `${window.location.origin}/book/${barbershopSlug}`;
+    navigator.clipboard.writeText(link);
+    toast({
+      title: "Link copiado!",
+      description: "O link foi copiado para a área de transferência",
+    });
+  };
+
+  const openBookingPage = () => {
+    window.open(`${window.location.origin}/book/${barbershopSlug}`, '_blank');
   };
 
   if (loading) {
@@ -98,7 +125,7 @@ const Dashboard = () => {
             Olá, <span className="text-primary">{user?.user_metadata?.barber_name || "Barbeiro"}</span>
           </h1>
           <p className="text-muted-foreground">
-            Bem-vindo ao painel da {user?.user_metadata?.barbershop_name || "sua barbearia"}
+            Bem-vindo ao painel da {barbershopName || user?.user_metadata?.barbershop_name || "sua barbearia"}
           </p>
         </div>
 
@@ -181,21 +208,22 @@ const Dashboard = () => {
             <div className="flex gap-2">
               <Input
                 readOnly
-                value={`${window.location.origin}/book/${user?.id}`}
-                className="flex-1"
+                value={`${window.location.origin}/book/${barbershopSlug}`}
+                className="flex-1 bg-background"
               />
-              <Button
-                onClick={() => {
-                  navigator.clipboard.writeText(`${window.location.origin}/book/${user?.id}`);
-                  toast({
-                    title: "Link copiado!",
-                    description: "O link foi copiado para a área de transferência",
-                  });
-                }}
-              >
+              <Button onClick={copyBookingLink} disabled={!barbershopSlug}>
+                <Copy className="h-4 w-4 mr-2" />
                 Copiar
               </Button>
+              <Button onClick={openBookingPage} disabled={!barbershopSlug} variant="outline">
+                <ExternalLink className="h-4 w-4" />
+              </Button>
             </div>
+            {barbershopSlug && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Seu link personalizado: <span className="text-primary font-medium">{barbershopSlug}</span>
+              </p>
+            )}
           </Card>
         </div>
       </main>

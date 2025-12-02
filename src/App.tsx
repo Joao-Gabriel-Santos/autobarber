@@ -36,7 +36,7 @@ const App = () => (
           <Route path="/dashboard/schedule" element={<Schedule />} />
           <Route path="/dashboard/appointments" element={<Appointments />} />
           <Route path="/settings" element={<Settings />} />
-          <Route path="/book/:barberId" element={<BookAppointment />} />
+          <Route path="/book/:barberSlug" element={<BookAppointment />} />
           <Route path="/meus-agendamentos" element={<ClientAppointments />} />
           <Route path="/update-password" element={<UpdatePassword />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />

@@ -25,8 +25,17 @@ interface WorkingHour {
   end_time: string;
 }
 
+interface BarbershopData {
+  id: string;
+  user_id: string;
+  name: string;
+  slug: string;
+  avatar_url: string | null;
+  banner_url: string | null;
+}
+
 const BookAppointment = () => {
-  const { barberId } = useParams();
+  const { barberSlug } = useParams();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [services, setServices] = useState<Service[]>([]);
@@ -37,17 +46,17 @@ const BookAppointment = () => {
   const [availableTimes, setAvailableTimes] = useState<string[]>([]);
   const [clientName, setClientName] = useState("");
   const [clientWhatsapp, setClientWhatsapp] = useState("");
-  const [barberInfo, setBarberInfo] = useState<any>(null);
+  const [barbershopInfo, setBarbershopInfo] = useState<BarbershopData | null>(null);
 
   useEffect(() => {
-    loadBarberData();
-  }, [barberId]);
+    loadBarbershopData();
+  }, [barberSlug]);
 
   useEffect(() => {
-    if (selectedDate && selectedService) {
+    if (selectedDate && selectedService && barbershopInfo) {
       generateAvailableTimes();
     }
-  }, [selectedDate, selectedService]);
+  }, [selectedDate, selectedService, barbershopInfo]);
 
   function validateAndNormalize(phone: string) {
     const defaultCountry = 'BR' as CountryCode
@@ -66,23 +75,41 @@ const BookAppointment = () => {
     };
   }
 
-
-  const loadBarberData = async () => {
-    if (!barberId) return;
+  const loadBarbershopData = async () => {
+    if (!barberSlug) return;
 
     try {
-      // Obter o perfil público do barbeiro a partir de uma RPC pública ou criar uma tabela de 
-      // Por enquanto, vamos buscar diretamente nos buckets de armazenamento
+      // Buscar informações da barbearia pelo slug usando RPC
+      const { data: barbershops, error: barbershopError } = await supabase
+        .rpc('get_barbershop_by_slug', { slug_param: barberSlug });
+
+      if (barbershopError) throw barbershopError;
+      
+      if (!barbershops || barbershops.length === 0) {
+        toast({
+          title: "Barbearia não encontrada",
+          description: "Este link pode estar incorreto ou a barbearia não existe mais.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      const barbershopData = barbershops[0];
+      
+      // Buscar avatar e banner do storage
       const { data: { publicUrl: avatarUrl } } = supabase
         .storage
         .from('avatars')
-        .getPublicUrl(`${barberId}/avatar.png`);
+        .getPublicUrl(`${barbershopData.user_id}/avatar.png`);
+      
       const { data: { publicUrl: bannerUrl } } = supabase
         .storage
         .from('banners')
-        .getPublicUrl(`${barberId}/banner.png`);
+        .getPublicUrl(`${barbershopData.user_id}/banner.png`);
 
-      setBarberInfo({
+      setBarbershopInfo({
+        ...barbershopData,
         avatar_url: avatarUrl,
         banner_url: bannerUrl,
       });
@@ -91,7 +118,7 @@ const BookAppointment = () => {
       const { data: servicesData, error: servicesError } = await supabase
         .from("services")
         .select("*")
-        .eq("barber_id", barberId)
+        .eq("barber_id", barbershopData.user_id)
         .eq("active", true);
 
       if (servicesError) throw servicesError;
@@ -101,7 +128,7 @@ const BookAppointment = () => {
       const { data: hoursData, error: hoursError } = await supabase
         .from("working_hours")
         .select("*")
-        .eq("barber_id", barberId)
+        .eq("barber_id", barbershopData.user_id)
         .eq("active", true);
 
       if (hoursError) throw hoursError;
@@ -118,7 +145,7 @@ const BookAppointment = () => {
   };
 
   const generateAvailableTimes = async () => {
-    if (!selectedDate || !selectedService) return;
+    if (!selectedDate || !selectedService || !barbershopInfo) return;
 
     const dayOfWeek = selectedDate.getDay();
     const workingHour = workingHours.find(wh => wh.day_of_week === dayOfWeek);
@@ -132,7 +159,7 @@ const BookAppointment = () => {
     const { data: existingAppointments } = await supabase
       .from("appointments")
       .select("appointment_time, services(duration)")
-      .eq("barber_id", barberId)
+      .eq("barber_id", barbershopInfo.user_id)
       .eq("appointment_date", format(selectedDate, "yyyy-MM-dd"))
       .in("status", ["pending", "confirmed"]);
 
@@ -182,58 +209,57 @@ const BookAppointment = () => {
         times.push(timeSlot);
       }
       
-      currentTime += 30; // Incrementar em intervalos de 30 minutos
+      currentTime += 30;
     }
 
     setAvailableTimes(times);
   };
 
   const getFilteredTimes = () => {
-      if (!selectedDate) return [];
+    if (!selectedDate) return [];
 
-      const today = new Date();
-      const isToday =
-        format(selectedDate, "yyyy-MM-dd") === format(today, "yyyy-MM-dd");
+    const today = new Date();
+    const isToday = format(selectedDate, "yyyy-MM-dd") === format(today, "yyyy-MM-dd");
 
-      let times = availableTimes; // sua lista original
+    let times = availableTimes;
 
-      if (isToday) {
-        const currentTime = today.getHours() * 60 + today.getMinutes();
+    if (isToday) {
+      const currentTime = today.getHours() * 60 + today.getMinutes();
+      times = times.filter((t) => {
+        const [h, m] = t.split(":").map(Number);
+        const minutes = h * 60 + m;
+        return minutes > currentTime;
+      });
+    }
 
-        times = times.filter((t) => {
-          const [h, m] = t.split(":").map(Number);
-          const minutes = h * 60 + m;
-          return minutes > currentTime;
-        });
-      }
-
-      return times;
-    };
+    return times;
+  };
 
   const handleBooking = async () => {
-    if (!selectedService || !selectedDate || !selectedTime || !clientName || !clientWhatsapp) {
+    if (!selectedService || !selectedDate || !selectedTime || !clientName || !clientWhatsapp || !barbershopInfo) {
       toast({
         title: "Preencha todos os campos",
         variant: "destructive",
       });
       return;
     }
+
     const phoneCheck = validateAndNormalize(clientWhatsapp);
-      if (!phoneCheck.valid) {
-        toast({
-          title: "WhatsApp inválido",
-          description: "Digite um número válido. Ex: (11) 98765-4321",
-          variant: "destructive",
-        });
-        return;
-      }
-    const normalizedWhatsapp = phoneCheck.e164; // ex: +5511998765432
+    if (!phoneCheck.valid) {
+      toast({
+        title: "WhatsApp inválido",
+        description: "Digite um número válido. Ex: (11) 98765-4321",
+        variant: "destructive",
+      });
+      return;
+    }
+    const normalizedWhatsapp = phoneCheck.e164;
 
     try {
       const { error } = await supabase
         .from("appointments")
         .insert([{
-          barber_id: barberId,
+          barber_id: barbershopInfo.user_id,
           service_id: selectedService.id,
           appointment_date: format(selectedDate, "yyyy-MM-dd"),
           appointment_time: selectedTime,
@@ -267,10 +293,9 @@ const BookAppointment = () => {
 
   const disabledDays = (date: Date) => {
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // Normalizar
+    today.setHours(0, 0, 0, 0);
 
     const isPast = date < today;
-
     const dayOfWeek = date.getDay();
     const barberWorksThisDay = workingHours.some(wh => wh.day_of_week === dayOfWeek);
 
@@ -288,13 +313,26 @@ const BookAppointment = () => {
     );
   }
 
+  if (!barbershopInfo) {
+    return (
+      <div className="min-h-screen bg-gradient-dark flex items-center justify-center p-4">
+        <Card className="p-8 text-center border-border bg-card max-w-md">
+          <h2 className="text-2xl font-bold mb-4">Barbearia não encontrada</h2>
+          <p className="text-muted-foreground">
+            Este link pode estar incorreto ou a barbearia não existe mais.
+          </p>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-dark">
       <header className="relative border-b border-border">
-        {barberInfo?.banner_url && (
+        {barbershopInfo.banner_url && (
           <div className="h-48 overflow-hidden">
             <img 
-              src={barberInfo.banner_url} 
+              src={barbershopInfo.banner_url} 
               alt="Banner da barbearia" 
               className="w-full h-full object-cover"
             />
@@ -302,20 +340,20 @@ const BookAppointment = () => {
         )}
         <div className="container mx-auto px-4 py-6 text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
-            {barberInfo?.avatar_url ? (
+            {barbershopInfo.avatar_url ? (
               <img 
-                src={barberInfo.avatar_url} 
+                src={barbershopInfo.avatar_url} 
                 alt="Logo" 
                 className="h-20 w-20 rounded-full object-cover border-4 border-background shadow-lg -mt-10"
               />
             ) : (
               <div className="h-20 w-20 rounded-full bg-gradient-gold flex items-center justify-center font-bold text-primary-foreground text-2xl border-4 border-background shadow-lg -mt-10">
-                AB
+                {barbershopInfo.name?.charAt(0) || "AB"}
               </div>
             )}
           </div>
           <h1 className="text-3xl font-bold">
-            {barberInfo?.barbershop_name || "Barbearia"}
+            {barbershopInfo.name}
           </h1>
           <p className="text-muted-foreground mb-4">
             Faça seu agendamento

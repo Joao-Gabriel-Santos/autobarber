@@ -12,6 +12,7 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "13.0.5"
   }
+  
   public: {
     Tables: {
       appointments: {
@@ -167,7 +168,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_barbershop_by_slug: {
+      Args: { slug_param: string },
+      Returns: BarbershopData[]
+    }
     }
     Enums: {
       [_ in never]: never
@@ -300,3 +304,18 @@ export const Constants = {
     Enums: {},
   },
 } as const
+
+// supabase.types.ts
+
+export interface BarbershopData {
+  id: string;
+  user_id: string;
+  name: string;
+  slug: string;
+  avatar_url?: string | null;
+  banner_url?: string | null;
+}
+
+
+
+
