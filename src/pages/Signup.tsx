@@ -39,18 +39,34 @@ const Signup = () => {
       if (error) throw error;
       if (!data.user) throw new Error("Usuário não foi criado.");
 
-      // 2️⃣ Criar profile (caso o trigger não funcione)
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .upsert({
-          id: data.user.id,
-          full_name: formData.barberName,
-          whatsapp: formData.whatsapp,
-        });
+      // Aguardar um pouco para o trigger criar o profile
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-      if (profileError) {
-        console.error("Error creating profile:", profileError);
-        // Não vamos bloquear o signup por causa disso
+      // 2️⃣ Verificar se profile foi criado, se não, criar
+      const { data: existingProfile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("id", data.user.id)
+        .maybeSingle();
+
+      if (!existingProfile) {
+        console.log("Profile not created by trigger, creating manually...");
+        const { error: profileError } = await supabase
+          .from("profiles")
+          .insert({
+            id: data.user.id,
+            full_name: formData.barberName,
+            whatsapp: formData.whatsapp,
+          });
+
+        if (profileError) {
+          console.error("Error creating profile:", profileError);
+          toast({
+            title: "Aviso",
+            description: "Perfil não foi criado automaticamente. Configure-o nas configurações.",
+            variant: "default",
+          });
+        }
       }
 
       // 3️⃣ Criar barbearia vinculada ao usuário

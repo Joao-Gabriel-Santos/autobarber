@@ -15,6 +15,10 @@ const Dashboard = () => {
   const [barbershopSlug, setBarbershopSlug] = useState<string>("");
   const [barbershopName, setBarbershopName] = useState<string>("");
   const [fullName, setFullName] = useState<string>("");
+  const [totalHoje, setTotalHoje] = useState(0);
+  const [receitaHoje, setReceitaHoje] = useState(0);
+  const [taxaConfirmacao, setTaxaConfirmacao] = useState(0);
+
 
   useEffect(() => {
     checkUser();
@@ -23,37 +27,47 @@ const Dashboard = () => {
   const checkUser = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) {
         navigate("/login");
         return;
       }
-      
+      const stats = await loadDashboardStats(user.id);
+      if (stats) {
+        setTotalHoje(stats.totalHoje);
+        setReceitaHoje(stats.receitaHoje);
+        setTaxaConfirmacao(stats.taxaConfirmacao);
+      }
+
       setUser(user);
-      
+
       // Buscar dados do profile
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("full_name")
         .eq("id", user.id)
-        .single();
-      
+        .maybeSingle();
+
+      if (profileError) {
+        console.error("Error loading profile:", profileError);
+      }
+
       // Buscar dados da barbearia
-      const { data: barbershop, error } = await supabase
+      const { data: barbershop, error: barbershopError } = await supabase
         .from("barbershops")
         .select("slug, barbershop_name")
         .eq("barber_id", user.id)
-        .single();
-      
-      if (error) {
-        console.error("Error loading barbershop:", error);
+        .maybeSingle();
+
+      if (barbershopError) {
+        console.error("Error loading barbershop:", barbershopError);
       }
-      
+
       if (barbershop) {
         setBarbershopSlug(barbershop.slug || "");
         setBarbershopName(barbershop.barbershop_name || "");
       }
-      
+
       if (profile) {
         setFullName(profile.full_name || "");
       }
@@ -81,6 +95,39 @@ const Dashboard = () => {
     }
   };
 
+  const loadDashboardStats = async (userId: string) => {
+    const today = new Date().toISOString().split("T")[0];
+
+    const { data, error } = await supabase
+      .from("appointments")
+      .select("status, appointment_date, price")
+      .eq("barber_id", userId)
+      .eq("appointment_date", today);
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    const totalHoje = data.length;
+
+    const receitaHoje = data
+      .filter(a => a.status === "completed" || a.status === "confirmed")
+      .reduce((sum, a) => sum + (a.price || 0), 0);
+
+    const taxaConfirmacao =
+      totalHoje === 0
+        ? 0
+        : Math.round(
+          (data.filter(a => a.status === "confirmed" || a.status === "completed").length /
+            totalHoje) *
+          100
+        );
+
+    return { totalHoje, receitaHoje, taxaConfirmacao };
+  };
+
+
   const copyBookingLink = () => {
     if (!barbershopSlug) {
       toast({
@@ -90,7 +137,7 @@ const Dashboard = () => {
       });
       return;
     }
-    
+
     const link = `${window.location.origin}/book/${barbershopSlug}`;
     navigator.clipboard.writeText(link);
     toast({
@@ -108,7 +155,7 @@ const Dashboard = () => {
       });
       return;
     }
-    
+
     window.open(`${window.location.origin}/book/${barbershopSlug}`, '_blank');
   };
 
@@ -170,7 +217,7 @@ const Dashboard = () => {
               <span className="text-muted-foreground text-sm">Agendamentos Hoje</span>
               <Calendar className="h-4 w-4 text-primary" />
             </div>
-            <p className="text-3xl font-bold">0</p>
+            <p className="text-3xl font-bold">{totalHoje}</p>
           </div>
 
           <div className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all">
@@ -178,7 +225,7 @@ const Dashboard = () => {
               <span className="text-muted-foreground text-sm">Receita do Dia</span>
               <TrendingUp className="h-4 w-4 text-primary" />
             </div>
-            <p className="text-3xl font-bold">R$ 0,00</p>
+            <p className="text-3xl font-bold">{receitaHoje}</p>
           </div>
 
           <div className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all">
@@ -186,7 +233,7 @@ const Dashboard = () => {
               <span className="text-muted-foreground text-sm">Taxa de Confirmação</span>
               <TrendingUp className="h-4 w-4 text-primary" />
             </div>
-            <p className="text-3xl font-bold">100%</p>
+            <p className="text-3xl font-bold">{taxaConfirmacao}</p>
           </div>
         </div>
 
@@ -244,9 +291,9 @@ const Dashboard = () => {
                 <p className="text-sm text-yellow-600 dark:text-yellow-400">
                   ⚠️ Configure seu link personalizado nas configurações para compartilhar com seus clientes.
                 </p>
-                <Button 
-                  onClick={() => navigate("/settings")} 
-                  variant="outline" 
+                <Button
+                  onClick={() => navigate("/settings")}
+                  variant="outline"
                   className="mt-2"
                 >
                   Ir para Configurações

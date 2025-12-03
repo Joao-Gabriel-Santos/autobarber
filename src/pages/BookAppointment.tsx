@@ -76,16 +76,22 @@ const BookAppointment = () => {
   }
 
   const loadBarbershopData = async () => {
-    if (!barberSlug) return;
+    if (!barberSlug) {
+      console.log("No barberSlug provided");
+      return;
+    }
 
     try {
+      console.log("Searching for slug:", barberSlug);
       
       // Tentar buscar diretamente da tabela primeiro (para debug)
       const { data: directData, error: directError } = await supabase
         .from("barbershops")
         .select("*")
         .eq("slug", barberSlug)
-        .single();
+        .maybeSingle();
+
+      console.log("Direct query result:", { directData, directError });
 
       if (directError || !directData) {
         toast({
@@ -96,19 +102,25 @@ const BookAppointment = () => {
         setLoading(false);
         return;
       }
-        // Buscar nome do barbeiro no profiles
-      const { data: profile } = await supabase
+
+      // Buscar nome do barbeiro no profiles
+      const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("full_name")
         .eq("id", directData.barber_id)
-        .single();
+        .maybeSingle();
+      
+      if (profileError) {
+        console.error("Error loading profile:", profileError);
+      }
 
       const barbershopData = {
         barber_id: directData.barber_id,
         barbershop_name: directData.barbershop_name,
-        full_name: profile?.full_name,
+        full_name: profile?.full_name || null,
         slug: directData.slug
       };
+      
       // Buscar avatar e banner do storage
       const { data: { publicUrl: avatarUrl } } = supabase
         .storage
