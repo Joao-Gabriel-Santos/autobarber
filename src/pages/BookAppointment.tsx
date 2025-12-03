@@ -76,17 +76,18 @@ const BookAppointment = () => {
   }
 
   const loadBarbershopData = async () => {
-
     if (!barberSlug) return;
 
     try {
-      // Buscar informações da barbearia pelo slug usando RPC
-      const { data: barbershops, error: barbershopError } = await supabase
-        .rpc('get_barbershop_by_slug', { slug_param: barberSlug });
-
-      if (barbershopError) throw barbershopError;
       
-      if (!barbershops || barbershops.length === 0) {
+      // Tentar buscar diretamente da tabela primeiro (para debug)
+      const { data: directData, error: directError } = await supabase
+        .from("barbershops")
+        .select("*")
+        .eq("slug", barberSlug)
+        .single();
+
+      if (directError || !directData) {
         toast({
           title: "Barbearia não encontrada",
           description: "Este link pode estar incorreto ou a barbearia não existe mais.",
@@ -96,8 +97,12 @@ const BookAppointment = () => {
         return;
       }
 
-      const barbershopData = barbershops[0];
-      
+      const barbershopData = {
+        barber_id: directData.barber_id,
+        barbershop_name: directData.barbershop_name,
+        barber_name: directData.barber_name,
+        slug: directData.slug
+      };
       // Buscar avatar e banner do storage
       const { data: { publicUrl: avatarUrl } } = supabase
         .storage
