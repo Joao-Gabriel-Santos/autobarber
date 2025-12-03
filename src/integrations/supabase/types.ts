@@ -7,8 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "13.0.5"
   }
@@ -17,42 +15,42 @@ export type Database = {
     Tables: {
       appointments: {
         Row: {
-          appointment_date: string
-          appointment_time: string
+          id: string
           barber_id: string
+          service_id: string
           client_name: string
           client_whatsapp: string
-          created_at: string
-          id: string
-          price: number
-          service_id: string
+          appointment_date: string
+          appointment_time: string
           status: string
+          price: number
+          created_at: string
           updated_at: string
         }
         Insert: {
-          appointment_date: string
-          appointment_time: string
+          id?: string
           barber_id: string
+          service_id: string
           client_name: string
           client_whatsapp: string
-          created_at?: string
-          id?: string
-          price: number
-          service_id: string
+          appointment_date: string
+          appointment_time: string
           status?: string
+          price: number
+          created_at?: string
           updated_at?: string
         }
         Update: {
-          appointment_date?: string
-          appointment_time?: string
+          id?: string
           barber_id?: string
+          service_id?: string
           client_name?: string
           client_whatsapp?: string
-          created_at?: string
-          id?: string
-          price?: number
-          service_id?: string
+          appointment_date?: string
+          appointment_time?: string
           status?: string
+          price?: number
+          created_at?: string
           updated_at?: string
         }
         Relationships: [
@@ -65,103 +63,119 @@ export type Database = {
           },
         ]
       }
-      services: {
+      barbershops: {
         Row: {
-          active: boolean
           barber_id: string
+          barbershop_name: string
+          barber_name: string | null
           created_at: string
-          duration: number
-          id: string
-          image_url: string | null
-          name: string
-          price: number
           updated_at: string
+          slug: string
         }
         Insert: {
-          active?: boolean
-          barber_id: string
+          barber_id?: string
+          barbershop_name?: string
+          barber_name?: string | null
           created_at?: string
-          duration: number
-          id?: string
-          image_url?: string | null
-          name: string
-          price: number
           updated_at?: string
+          slug?: string
         }
         Update: {
-          active?: boolean
           barber_id?: string
+          barbershop_name?: string
+          barber_name?: string | null
           created_at?: string
-          duration?: number
-          id?: string
-          image_url?: string | null
-          name?: string
-          price?: number
           updated_at?: string
+          slug?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          id: string
+          barber_name: string | null
+          whatsapp: string | null
+          created_at: string
+        }
+        Insert: {
+          id: string
+          barber_name?: string | null
+          whatsapp?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          barber_name?: string | null
+          whatsapp?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      services: {
+        Row: {
+          id: string
+          barber_id: string
+          name: string
+          duration: number
+          price: number
+          active: boolean
+          created_at: string
+          updated_at: string
+          image_url: string | null
+        }
+        Insert: {
+          id?: string
+          barber_id: string
+          name: string
+          duration: number
+          price: number
+          active?: boolean
+          created_at?: string
+          updated_at?: string
+          image_url?: string | null
+        }
+        Update: {
+          id?: string
+          barber_id?: string
+          name?: string
+          duration?: number
+          price?: number
+          active?: boolean
+          created_at?: string
+          updated_at?: string
+          image_url?: string | null
         }
         Relationships: []
       }
       working_hours: {
         Row: {
-          active: boolean
-          barber_id: string
-          created_at: string
-          day_of_week: number
-          end_time: string
           id: string
+          barber_id: string
+          day_of_week: number
           start_time: string
+          end_time: string
+          active: boolean
+          created_at: string
         }
         Insert: {
-          active?: boolean
-          barber_id: string
-          created_at?: string
-          day_of_week: number
-          end_time: string
           id?: string
+          barber_id: string
+          day_of_week: number
           start_time: string
+          end_time: string
+          active?: boolean
+          created_at?: string
         }
         Update: {
-          active?: boolean
-          barber_id?: string
-          created_at?: string
-          day_of_week?: number
-          end_time?: string
           id?: string
+          barber_id?: string
+          day_of_week?: number
           start_time?: string
+          end_time?: string
+          active?: boolean
+          created_at?: string
         }
         Relationships: []
-      }
-      barbershops: {
-        Row: {
-          id: string
-          user_id: string
-          name: string
-          slug: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          name: string
-          slug?: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          name?: string
-          slug?: string
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "barbershops_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          }
-        ]
       }
     }
     Views: {
@@ -169,9 +183,9 @@ export type Database = {
     }
     Functions: {
       get_barbershop_by_slug: {
-      Args: { slug_param: string },
-      Returns: BarbershopData[]
-    }
+        Args: { slug_param: string }
+        Returns: BarbershopData[]
+      }
     }
     Enums: {
       [_ in never]: never
@@ -305,17 +319,10 @@ export const Constants = {
   },
 } as const
 
-// supabase.types.ts
-
-export interface BarbershopData {
-  id: string;
-  user_id: string;
-  name: string;
+// Custom types
+type BarbershopData = {
+  barber_id: string;
+  barbershop_name: string;
+  barber_name: string;
   slug: string;
-  avatar_url?: string | null;
-  banner_url?: string | null;
 }
-
-
-
-

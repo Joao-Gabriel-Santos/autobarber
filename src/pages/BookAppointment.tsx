@@ -76,6 +76,7 @@ const BookAppointment = () => {
   }
 
   const loadBarbershopData = async () => {
+
     if (!barberSlug) return;
 
     try {
@@ -101,24 +102,28 @@ const BookAppointment = () => {
       const { data: { publicUrl: avatarUrl } } = supabase
         .storage
         .from('avatars')
-        .getPublicUrl(`${barbershopData.user_id}/avatar.png`);
+        .getPublicUrl(`${barbershopData.barber_id}/avatar.png`);
       
       const { data: { publicUrl: bannerUrl } } = supabase
         .storage
         .from('banners')
-        .getPublicUrl(`${barbershopData.user_id}/banner.png`);
+        .getPublicUrl(`${barbershopData.barber_id}/banner.png`);
 
-      setBarbershopInfo({
-        ...barbershopData,
+      setBarbershopInfo( {
+        id: barbershopData.barber_id,
+        user_id: barbershopData.barber_id,
+        name: barbershopData.barbershop_name,
+        slug: barbershopData.slug,
         avatar_url: avatarUrl,
         banner_url: bannerUrl,
-      });
+      })
+
 
       // Load services
       const { data: servicesData, error: servicesError } = await supabase
         .from("services")
         .select("*")
-        .eq("barber_id", barbershopData.user_id)
+        .eq("barber_id", barbershopData.barber_id)
         .eq("active", true);
 
       if (servicesError) throw servicesError;
@@ -128,7 +133,7 @@ const BookAppointment = () => {
       const { data: hoursData, error: hoursError } = await supabase
         .from("working_hours")
         .select("*")
-        .eq("barber_id", barbershopData.user_id)
+        .eq("barber_id", barbershopData.barber_id)
         .eq("active", true);
 
       if (hoursError) throw hoursError;

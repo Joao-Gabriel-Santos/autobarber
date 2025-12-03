@@ -27,20 +27,25 @@ const Signup = () => {
         email: formData.email,
         password: formData.password,
         options: {
-          emailRedirectTo: `${window.location.origin}/confirm-email?email=${encodeURIComponent(formData.email)}`,
-          data: {
-            barbershop_name: formData.barbershopName,
-            barber_name: formData.barberName,
-            whatsapp: formData.whatsapp,
-          },
+          emailRedirectTo: `${window.location.origin}/confirm-email`,
         },
       });
 
       if (error) throw error;
+      if (!data.user) throw new Error("Usuário não foi criado.");
+
+      // 2️⃣ Criar barbearia vinculada ao usuário recém-criado
+      const { error: insertError } = await supabase.from("barbershops").insert({
+        barber_id: data.user.id,
+        barber_name: formData.barberName,
+        barbershop_name: formData.barbershopName,
+      });
+
+      if (insertError) throw insertError;
 
       toast({
-        title: "Confirmação enviada!",
-        description: "Verifique seu e-mail e siga as instruções para ativar a conta!",
+        title: "Conta criada!",
+        description: "Verifique seu e-mail para confirmar e acessar o sistema.",
       });
 
       navigate("/login");

@@ -14,6 +14,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [barbershopSlug, setBarbershopSlug] = useState<string>("");
   const [barbershopName, setBarbershopName] = useState<string>("");
+  const [barberName, setBarberName] = useState<String>("");
 
   useEffect(() => {
     checkUser();
@@ -33,13 +34,14 @@ const Dashboard = () => {
       // Buscar slug da barbearia
       const { data: barbershop } = await supabase
         .from("barbershops")
-        .select("slug, name")
-        .eq("user_id", user.id)
+        .select("slug, barber_name, barbershop_name")
+        .eq("barber_id", user.id)
         .single();
       
       if (barbershop) {
         setBarbershopSlug(barbershop.slug);
-        setBarbershopName(barbershop.name);
+        setBarbershopName(barbershop.barbershop_name);
+        setBarberName(barbershop.barber_name);
       }
     } catch (error) {
       console.error("Error checking user:", error);
@@ -122,10 +124,10 @@ const Dashboard = () => {
       <main className="container mx-auto px-4 py-8">
         <div className="mb-8">
           <h1 className="text-4xl font-bold mb-2">
-            Olá, <span className="text-primary">{user?.user_metadata?.barber_name || "Barbeiro"}</span>
+            Olá, <span className="text-primary">{barberName || "Barbeiro"}</span>
           </h1>
           <p className="text-muted-foreground">
-            Bem-vindo ao painel da {barbershopName || user?.user_metadata?.barbershop_name || "sua barbearia"}
+            Bem-vindo ao painel da {barbershopName || "sua barbearia"}
           </p>
         </div>
 
