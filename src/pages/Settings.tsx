@@ -19,7 +19,7 @@ const Settings = () => {
   const [savingSlug, setSavingSlug] = useState(false);
   const [formData, setFormData] = useState({
     barbershopName: "",
-    barberName: "",
+    fullName: "",
     whatsapp: "",
     avatarUrl: "",
     bannerUrl: "",
@@ -43,6 +43,13 @@ const Settings = () => {
       
       setUser(user);
       
+      // Buscar dados do profile
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+      
       // Buscar dados da barbearia usando barber_id
       const { data: barbershop, error: barbershopError } = await supabase
         .from("barbershops")
@@ -61,7 +68,7 @@ const Settings = () => {
       }
       
       if (barbershop) {
-        setBarbershopId(barbershop.barber_id); // O ID é o barber_id
+        setBarbershopId(barbershop.barber_id);
         
         // Buscar URLs das imagens com cache-busting
         const timestamp = new Date().getTime();
@@ -77,8 +84,8 @@ const Settings = () => {
         
         setFormData({
           barbershopName: barbershop.barbershop_name || "",
-          barberName: barbershop.barber_name || "",
-          whatsapp: user.user_metadata?.whatsapp || "",
+          fullName: profile?.full_name || "",
+          whatsapp: profile?.whatsapp || "",
           avatarUrl: `${avatarUrl}?t=${timestamp}`,
           bannerUrl: `${bannerUrl}?t=${timestamp}`,
           slug: barbershop.slug || "",
@@ -223,25 +230,36 @@ const Settings = () => {
 
   const handleSave = async () => {
     try {
-      // Atualizar no auth metadata
-      const { error: authError } = await supabase.auth.updateUser({
-        data: {
+      // 1️⃣ Atualizar profile (dados pessoais)
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .upsert({
+          id: user.id,
+          full_name: formData.fullName,
           whatsapp: formData.whatsapp,
-        }
-      });
+        });
 
-      if (authError) throw authError;
+      if (profileError) throw profileError;
 
-      // Atualizar na tabela barbershops
+      // 2️⃣ Atualizar barbershop (dados da barbearia)
       const { error: barbershopError } = await supabase
         .from("barbershops")
         .update({
           barbershop_name: formData.barbershopName,
-          barber_name: formData.barberName,
         })
         .eq("barber_id", barbershopId);
 
       if (barbershopError) throw barbershopError;
+
+      // 3️⃣ Atualizar metadata do auth também
+      const { error: authError } = await supabase.auth.updateUser({
+        data: {
+          full_name: formData.fullName,
+          whatsapp: formData.whatsapp,
+        }
+      });
+
+      if (authError) console.error("Auth metadata update error:", authError);
 
       toast({
         title: "Configurações salvas!",
@@ -407,12 +425,13 @@ const Settings = () => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="barberName">Nome do Barbeiro</Label>
+                <Label htmlFor="fullName">Seu Nome</Label>
                 <Input
-                  id="barberName"
-                  value={formData.barberName}
-                  onChange={(e) => setFormData(prev => ({ ...prev, barberName: e.target.value }))}
+                  id="fullName"
+                  value={formData.fullName}
+                  onChange={(e) => setFormData(prev => ({ ...prev, fullName: e.target.value }))}
                   className="bg-background"
+                  placeholder="João Silva"
                 />
               </div>
 

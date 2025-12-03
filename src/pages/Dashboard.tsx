@@ -14,7 +14,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [barbershopSlug, setBarbershopSlug] = useState<string>("");
   const [barbershopName, setBarbershopName] = useState<string>("");
-  const [barberName, setBarberName] = useState<string>("");
+  const [fullName, setFullName] = useState<string>("");
 
   useEffect(() => {
     checkUser();
@@ -31,10 +31,17 @@ const Dashboard = () => {
       
       setUser(user);
       
-      // Buscar slug da barbearia usando barber_id
+      // Buscar dados do profile
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", user.id)
+        .single();
+      
+      // Buscar dados da barbearia
       const { data: barbershop, error } = await supabase
         .from("barbershops")
-        .select("slug, barber_name, barbershop_name")
+        .select("slug, barbershop_name")
         .eq("barber_id", user.id)
         .single();
       
@@ -45,7 +52,10 @@ const Dashboard = () => {
       if (barbershop) {
         setBarbershopSlug(barbershop.slug || "");
         setBarbershopName(barbershop.barbershop_name || "");
-        setBarberName(barbershop.barber_name || "");
+      }
+      
+      if (profile) {
+        setFullName(profile.full_name || "");
       }
     } catch (error) {
       console.error("Error checking user:", error);
@@ -129,7 +139,7 @@ const Dashboard = () => {
             </div>
             <div className="flex items-center gap-4">
               <span className="text-sm text-muted-foreground hidden sm:block">
-                {barberName || user?.email}
+                {fullName || user?.email}
               </span>
               <Button variant="outline" size="icon" onClick={() => navigate("/settings")}>
                 <Settings className="h-4 w-4" />
@@ -146,7 +156,7 @@ const Dashboard = () => {
       <main className="container mx-auto px-4 py-8">
         <div className="mb-8">
           <h1 className="text-4xl font-bold mb-2">
-            Olá, <span className="text-primary">{barberName || "Barbeiro"}</span>
+            Olá, <span className="text-primary">{fullName || "Barbeiro"}</span>
           </h1>
           <p className="text-muted-foreground">
             Bem-vindo ao painel da {barbershopName || "sua barbearia"}

@@ -67,7 +67,6 @@ export type Database = {
         Row: {
           barber_id: string
           barbershop_name: string
-          barber_name: string | null
           created_at: string
           updated_at: string
           slug: string
@@ -75,7 +74,6 @@ export type Database = {
         Insert: {
           barber_id: string
           barbershop_name: string
-          barber_name?: string | null
           created_at?: string
           updated_at?: string
           slug?: string
@@ -83,7 +81,6 @@ export type Database = {
         Update: {
           barber_id?: string
           barbershop_name?: string
-          barber_name?: string | null
           created_at?: string
           updated_at?: string
           slug?: string
@@ -93,21 +90,24 @@ export type Database = {
       profiles: {
         Row: {
           id: string
-          barber_name: string | null
+          full_name: string | null
           whatsapp: string | null
           created_at: string
+          updated_at: string
         }
         Insert: {
           id: string
-          barber_name?: string | null
+          full_name?: string | null
           whatsapp?: string | null
           created_at?: string
+          updated_at?: string
         }
         Update: {
           id?: string
-          barber_name?: string | null
+          full_name?: string | null
           whatsapp?: string | null
           created_at?: string
+          updated_at?: string
         }
         Relationships: []
       }

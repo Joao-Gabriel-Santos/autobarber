@@ -96,11 +96,17 @@ const BookAppointment = () => {
         setLoading(false);
         return;
       }
+        // Buscar nome do barbeiro no profiles
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", directData.barber_id)
+        .single();
 
       const barbershopData = {
         barber_id: directData.barber_id,
         barbershop_name: directData.barbershop_name,
-        barber_name: directData.barber_name,
+        full_name: profile?.full_name,
         slug: directData.slug
       };
       // Buscar avatar e banner do storage

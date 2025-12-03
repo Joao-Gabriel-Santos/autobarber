@@ -23,22 +23,41 @@ const Signup = () => {
     setLoading(true);
 
     try {
+      // 1️⃣ Criar usuário no Auth com metadata
       const { data, error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
         options: {
           emailRedirectTo: `${window.location.origin}/confirm-email`,
+          data: {
+            full_name: formData.barberName,
+            whatsapp: formData.whatsapp,
+          }
         },
       });
 
       if (error) throw error;
       if (!data.user) throw new Error("Usuário não foi criado.");
 
-      // 2️⃣ Criar barbearia vinculada ao usuário recém-criado
+      // 2️⃣ Criar profile (caso o trigger não funcione)
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .upsert({
+          id: data.user.id,
+          full_name: formData.barberName,
+          whatsapp: formData.whatsapp,
+        });
+
+      if (profileError) {
+        console.error("Error creating profile:", profileError);
+        // Não vamos bloquear o signup por causa disso
+      }
+
+      // 3️⃣ Criar barbearia vinculada ao usuário
       const { error: insertError } = await supabase.from("barbershops").insert({
         barber_id: data.user.id,
-        barber_name: formData.barberName,
         barbershop_name: formData.barbershopName,
+        slug: '', // Será configurado depois nas settings
       });
 
       if (insertError) throw insertError;
