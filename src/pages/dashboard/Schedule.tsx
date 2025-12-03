@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface WorkingHour {
@@ -15,6 +15,12 @@ interface WorkingHour {
   start_time: string;
   end_time: string;
   active: boolean;
+}
+
+interface Break {
+  id: string;
+  start_time: string;
+  end_time: string;
 }
 
 const DAYS = [
@@ -32,7 +38,9 @@ const Schedule = () => {
   const { toast } = useToast();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [workingHours, setWorkingHours] = useState<Record<number, WorkingHour>>({});
+  const [breaks, setBreaks] = useState<Record<number, Break[]>>({});
 
   useEffect(() => {
     checkUser();
@@ -46,7 +54,7 @@ const Schedule = () => {
         return;
       }
       setUser(user);
-      loadSchedule(user.id);
+      await loadSchedule(user.id);
     } catch (error) {
       console.error("Error:", error);
       navigate("/login");
@@ -77,60 +85,6 @@ const Schedule = () => {
     setWorkingHours(hoursMap);
   };
 
-  const handleSave = async (dayOfWeek: number) => {
-    if (!user) return;
-
-    const currentHour = workingHours[dayOfWeek];
-    
-    if (!currentHour?.start_time || !currentHour?.end_time) {
-      toast({
-        title: "Erro",
-        description: "Preencha os horários de início e fim",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      if (currentHour.id) {
-        const { error } = await supabase
-          .from("working_hours")
-          .update({
-            start_time: currentHour.start_time,
-            end_time: currentHour.end_time,
-            active: currentHour.active,
-          })
-          .eq("id", currentHour.id);
-
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("working_hours")
-          .insert([{
-            barber_id: user.id,
-            day_of_week: dayOfWeek,
-            start_time: currentHour.start_time,
-            end_time: currentHour.end_time,
-            active: currentHour.active,
-          }]);
-
-        if (error) throw error;
-      }
-
-      toast({
-        title: "Horário salvo com sucesso!",
-      });
-
-      loadSchedule(user.id);
-    } catch (error: any) {
-      toast({
-        title: "Erro ao salvar horário",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
-  };
-
   const updateWorkingHour = (dayOfWeek: number, field: keyof WorkingHour, value: any) => {
     setWorkingHours(prev => ({
       ...prev,
@@ -141,6 +95,105 @@ const Schedule = () => {
         id: prev[dayOfWeek]?.id || "",
       } as WorkingHour,
     }));
+  };
+
+  const addBreak = (dayOfWeek: number) => {
+    setBreaks(prev => ({
+      ...prev,
+      [dayOfWeek]: [
+        ...(prev[dayOfWeek] || []),
+        { id: `temp-${Date.now()}`, start_time: "", end_time: "" }
+      ]
+    }));
+  };
+
+  const removeBreak = (dayOfWeek: number, breakId: string) => {
+    setBreaks(prev => ({
+      ...prev,
+      [dayOfWeek]: (prev[dayOfWeek] || []).filter(b => b.id !== breakId)
+    }));
+  };
+
+  const updateBreak = (dayOfWeek: number, breakId: string, field: 'start_time' | 'end_time', value: string) => {
+    setBreaks(prev => ({
+      ...prev,
+      [dayOfWeek]: (prev[dayOfWeek] || []).map(b => 
+        b.id === breakId ? { ...b, [field]: value } : b
+      )
+    }));
+  };
+
+  const handleSaveAll = async () => {
+    if (!user) return;
+
+    setSaving(true);
+    try {
+      // Validar todos os horários ativos
+      for (const [dayStr, hour] of Object.entries(workingHours)) {
+        if (hour.active && (!hour.start_time || !hour.end_time)) {
+          toast({
+            title: "Erro de validação",
+            description: `Preencha os horários de ${DAYS[parseInt(dayStr)]}`,
+            variant: "destructive",
+          });
+          setSaving(false);
+          return;
+        }
+
+        // Validar intervalos
+        const dayBreaks = breaks[parseInt(dayStr)] || [];
+        for (const brk of dayBreaks) {
+          if (!brk.start_time || !brk.end_time) {
+            toast({
+              title: "Erro de validação",
+              description: `Preencha todos os intervalos de ${DAYS[parseInt(dayStr)]}`,
+              variant: "destructive",
+            });
+            setSaving(false);
+            return;
+          }
+        }
+      }
+
+      // Salvar todos os horários
+      for (const [dayStr, hour] of Object.entries(workingHours)) {
+        if (hour.id) {
+          await supabase
+            .from("working_hours")
+            .update({
+              start_time: hour.start_time,
+              end_time: hour.end_time,
+              active: hour.active,
+            })
+            .eq("id", hour.id);
+        } else if (hour.active) {
+          await supabase
+            .from("working_hours")
+            .insert([{
+              barber_id: user.id,
+              day_of_week: parseInt(dayStr),
+              start_time: hour.start_time,
+              end_time: hour.end_time,
+              active: hour.active,
+            }]);
+        }
+      }
+
+      toast({
+        title: "Horários salvos com sucesso!",
+        description: "Todos os horários e intervalos foram atualizados.",
+      });
+
+      await loadSchedule(user.id);
+    } catch (error: any) {
+      toast({
+        title: "Erro ao salvar horários",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) {
@@ -158,11 +211,21 @@ const Schedule = () => {
     <div className="min-h-screen bg-gradient-dark">
       <header className="border-b border-border bg-card/50 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard")}>
-              <ArrowLeft className="h-5 w-5" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard")}>
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+              <h1 className="text-2xl font-bold">Horários de Funcionamento</h1>
+            </div>
+            <Button 
+              onClick={handleSaveAll} 
+              disabled={saving}
+              className="shadow-gold"
+              size="lg"
+            >
+              {saving ? "Salvando..." : "Salvar Todos os Horários"}
             </Button>
-            <h1 className="text-2xl font-bold">Horários de Funcionamento</h1>
           </div>
         </div>
       </header>
@@ -171,6 +234,8 @@ const Schedule = () => {
         <div className="space-y-4">
           {DAYS.map((day, index) => {
             const currentHour = workingHours[index];
+            const dayBreaks = breaks[index] || [];
+            
             return (
               <Card key={index} className="p-6 border-border bg-card">
                 <div className="flex items-center justify-between mb-4">
@@ -189,45 +254,102 @@ const Schedule = () => {
                   </div>
                 </div>
 
-                <div className="grid md:grid-cols-3 gap-4">
-                  <div>
-                    <Label htmlFor={`start-${index}`}>Hora de Início</Label>
-                    <Input
-                      id={`start-${index}`}
-                      type="time"
-                      value={currentHour?.start_time || ""}
-                      onChange={(e) =>
-                        updateWorkingHour(index, "start_time", e.target.value)
-                      }
-                      disabled={!currentHour?.active}
-                    />
-                  </div>
+                {currentHour?.active && (
+                  <div className="space-y-4">
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor={`start-${index}`}>Hora de Início</Label>
+                        <Input
+                          id={`start-${index}`}
+                          type="time"
+                          value={currentHour?.start_time || ""}
+                          onChange={(e) =>
+                            updateWorkingHour(index, "start_time", e.target.value)
+                          }
+                        />
+                      </div>
 
-                  <div>
-                    <Label htmlFor={`end-${index}`}>Hora de Término</Label>
-                    <Input
-                      id={`end-${index}`}
-                      type="time"
-                      value={currentHour?.end_time || ""}
-                      onChange={(e) =>
-                        updateWorkingHour(index, "end_time", e.target.value)
-                      }
-                      disabled={!currentHour?.active}
-                    />
-                  </div>
+                      <div>
+                        <Label htmlFor={`end-${index}`}>Hora de Término</Label>
+                        <Input
+                          id={`end-${index}`}
+                          type="time"
+                          value={currentHour?.end_time || ""}
+                          onChange={(e) =>
+                            updateWorkingHour(index, "end_time", e.target.value)
+                          }
+                        />
+                      </div>
+                    </div>
 
-                  <div className="flex items-end">
-                    <Button
-                      onClick={() => handleSave(index)}
-                      className="w-full"
-                    >
-                      Salvar
-                    </Button>
+                    {/* Intervalos */}
+                    <div className="border-t border-border pt-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <Label className="text-sm font-semibold">Intervalos</Label>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => addBreak(index)}
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Adicionar Intervalo
+                        </Button>
+                      </div>
+
+                      {dayBreaks.length > 0 && (
+                        <div className="space-y-3">
+                          {dayBreaks.map((brk) => (
+                            <div key={brk.id} className="flex gap-2 items-end">
+                              <div className="flex-1">
+                                <Label className="text-xs">Início do Intervalo</Label>
+                                <Input
+                                  type="time"
+                                  value={brk.start_time}
+                                  onChange={(e) =>
+                                    updateBreak(index, brk.id, 'start_time', e.target.value)
+                                  }
+                                />
+                              </div>
+                              <div className="flex-1">
+                                <Label className="text-xs">Fim do Intervalo</Label>
+                                <Input
+                                  type="time"
+                                  value={brk.end_time}
+                                  onChange={(e) =>
+                                    updateBreak(index, brk.id, 'end_time', e.target.value)
+                                  }
+                                />
+                              </div>
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="destructive"
+                                onClick={() => removeBreak(index, brk.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
               </Card>
             );
           })}
+        </div>
+
+        <div className="mt-6 flex justify-end">
+          <Button 
+            onClick={handleSaveAll} 
+            disabled={saving}
+            className="shadow-gold"
+            size="lg"
+          >
+            {saving ? "Salvando..." : "Salvar Todos os Horários"}
+          </Button>
         </div>
       </main>
     </div>

@@ -161,8 +161,8 @@ export type Database = {
           id?: string
           barber_id: string
           day_of_week: number
-          start_time: string
-          end_time: string
+          start_time?: string
+          end_time?: string
           active?: boolean
           created_at?: string
         }
