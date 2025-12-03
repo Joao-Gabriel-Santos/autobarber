@@ -19,6 +19,7 @@ const Settings = () => {
   const [savingSlug, setSavingSlug] = useState(false);
   const [formData, setFormData] = useState({
     barbershopName: "",
+    barberName: "",
     whatsapp: "",
     avatarUrl: "",
     bannerUrl: "",
@@ -42,17 +43,28 @@ const Settings = () => {
       
       setUser(user);
       
-      // Buscar dados da barbearia
-      const { data: barbershop } = await supabase
+      // Buscar dados da barbearia usando barber_id
+      const { data: barbershop, error: barbershopError } = await supabase
         .from("barbershops")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("barber_id", user.id)
         .single();
       
+      if (barbershopError) {
+        console.error("Error loading barbershop:", barbershopError);
+        toast({
+          title: "Erro ao carregar dados",
+          description: barbershopError.message,
+          variant: "destructive",
+        });
+        return;
+      }
+      
       if (barbershop) {
-        setBarbershopId(barbershop.id);
+        setBarbershopId(barbershop.barber_id); // O ID é o barber_id
         
-        // Buscar URLs das imagens
+        // Buscar URLs das imagens com cache-busting
+        const timestamp = new Date().getTime();
         const { data: { publicUrl: avatarUrl } } = supabase
           .storage
           .from('avatars')
@@ -64,10 +76,11 @@ const Settings = () => {
           .getPublicUrl(`${user.id}/banner.png`);
         
         setFormData({
-          barbershopName: barbershop.name || "",
+          barbershopName: barbershop.barbershop_name || "",
+          barberName: barbershop.barber_name || "",
           whatsapp: user.user_metadata?.whatsapp || "",
-          avatarUrl: avatarUrl,
-          bannerUrl: bannerUrl,
+          avatarUrl: `${avatarUrl}?t=${timestamp}`,
+          bannerUrl: `${bannerUrl}?t=${timestamp}`,
           slug: barbershop.slug || "",
           antiFaltasEnabled: true,
           remindersEnabled: true,
@@ -94,24 +107,35 @@ const Settings = () => {
       const bucketName = type === 'avatar' ? 'avatars' : 'banners';
       const fileName = `${user.id}/${type}.png`;
 
+      // Deletar a imagem antiga primeiro
+      await supabase.storage
+        .from(bucketName)
+        .remove([fileName]);
+
+      // Fazer upload da nova imagem
       const { error: uploadError } = await supabase.storage
         .from(bucketName)
         .upload(fileName, file, {
+          cacheControl: '0',
           upsert: true,
           contentType: file.type,
         });
 
       if (uploadError) throw uploadError;
 
+      // Adicionar timestamp para forçar atualização do cache
+      const timestamp = new Date().getTime();
       const { data: { publicUrl } } = supabase.storage
         .from(bucketName)
         .getPublicUrl(fileName);
 
+      const urlWithCache = `${publicUrl}?t=${timestamp}`;
       const fieldName = type === 'avatar' ? 'avatarUrl' : 'bannerUrl';
-      setFormData(prev => ({ ...prev, [fieldName]: publicUrl }));
+      setFormData(prev => ({ ...prev, [fieldName]: urlWithCache }));
 
       toast({
-        title: "Imagem enviada com sucesso!",
+        title: "Imagem atualizada com sucesso!",
+        description: "A nova imagem já está visível",
       });
 
     } catch (error: any) {
@@ -161,9 +185,9 @@ const Settings = () => {
       // Verificar se o slug já existe
       const { data: existingBarbershop } = await supabase
         .from("barbershops")
-        .select("id")
+        .select("barber_id")
         .eq("slug", formData.slug)
-        .neq("id", barbershopId)
+        .neq("barber_id", barbershopId)
         .single();
 
       if (existingBarbershop) {
@@ -178,7 +202,7 @@ const Settings = () => {
       const { error } = await supabase
         .from("barbershops")
         .update({ slug: formData.slug })
-        .eq("id", barbershopId);
+        .eq("barber_id", barbershopId);
 
       if (error) throw error;
 
@@ -202,7 +226,6 @@ const Settings = () => {
       // Atualizar no auth metadata
       const { error: authError } = await supabase.auth.updateUser({
         data: {
-          barbershop_name: formData.barbershopName,
           whatsapp: formData.whatsapp,
         }
       });
@@ -213,9 +236,10 @@ const Settings = () => {
       const { error: barbershopError } = await supabase
         .from("barbershops")
         .update({
-          name: formData.barbershopName,
+          barbershop_name: formData.barbershopName,
+          barber_name: formData.barberName,
         })
-        .eq("id", barbershopId);
+        .eq("barber_id", barbershopId);
 
       if (barbershopError) throw barbershopError;
 
@@ -383,12 +407,23 @@ const Settings = () => {
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="barberName">Nome do Barbeiro</Label>
+                <Input
+                  id="barberName"
+                  value={formData.barberName}
+                  onChange={(e) => setFormData(prev => ({ ...prev, barberName: e.target.value }))}
+                  className="bg-background"
+                />
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="whatsapp">WhatsApp</Label>
                 <Input
                   id="whatsapp"
                   value={formData.whatsapp}
                   onChange={(e) => setFormData(prev => ({ ...prev, whatsapp: e.target.value }))}
                   className="bg-background"
+                  placeholder="(11) 99999-9999"
                 />
               </div>
             </div>

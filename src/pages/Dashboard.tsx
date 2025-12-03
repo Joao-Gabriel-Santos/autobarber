@@ -14,7 +14,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [barbershopSlug, setBarbershopSlug] = useState<string>("");
   const [barbershopName, setBarbershopName] = useState<string>("");
-  const [barberName, setBarberName] = useState<String>("");
+  const [barberName, setBarberName] = useState<string>("");
 
   useEffect(() => {
     checkUser();
@@ -31,17 +31,21 @@ const Dashboard = () => {
       
       setUser(user);
       
-      // Buscar slug da barbearia
-      const { data: barbershop } = await supabase
+      // Buscar slug da barbearia usando barber_id
+      const { data: barbershop, error } = await supabase
         .from("barbershops")
         .select("slug, barber_name, barbershop_name")
         .eq("barber_id", user.id)
         .single();
       
+      if (error) {
+        console.error("Error loading barbershop:", error);
+      }
+      
       if (barbershop) {
-        setBarbershopSlug(barbershop.slug);
-        setBarbershopName(barbershop.barbershop_name);
-        setBarberName(barbershop.barber_name);
+        setBarbershopSlug(barbershop.slug || "");
+        setBarbershopName(barbershop.barbershop_name || "");
+        setBarberName(barbershop.barber_name || "");
       }
     } catch (error) {
       console.error("Error checking user:", error);
@@ -68,6 +72,15 @@ const Dashboard = () => {
   };
 
   const copyBookingLink = () => {
+    if (!barbershopSlug) {
+      toast({
+        title: "Configure seu link primeiro",
+        description: "Acesse as configurações para definir seu link personalizado.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     const link = `${window.location.origin}/book/${barbershopSlug}`;
     navigator.clipboard.writeText(link);
     toast({
@@ -77,6 +90,15 @@ const Dashboard = () => {
   };
 
   const openBookingPage = () => {
+    if (!barbershopSlug) {
+      toast({
+        title: "Configure seu link primeiro",
+        description: "Acesse as configurações para definir seu link personalizado.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     window.open(`${window.location.origin}/book/${barbershopSlug}`, '_blank');
   };
 
@@ -107,7 +129,7 @@ const Dashboard = () => {
             </div>
             <div className="flex items-center gap-4">
               <span className="text-sm text-muted-foreground hidden sm:block">
-                {user?.user_metadata?.barber_name || user?.email}
+                {barberName || user?.email}
               </span>
               <Button variant="outline" size="icon" onClick={() => navigate("/settings")}>
                 <Settings className="h-4 w-4" />
@@ -207,24 +229,39 @@ const Dashboard = () => {
             <p className="text-sm text-muted-foreground mb-4">
               Compartilhe este link com seus clientes para que eles possam fazer agendamentos online:
             </p>
-            <div className="flex gap-2">
-              <Input
-                readOnly
-                value={`${window.location.origin}/book/${barbershopSlug}`}
-                className="flex-1 bg-background"
-              />
-              <Button onClick={copyBookingLink} disabled={!barbershopSlug}>
-                <Copy className="h-4 w-4 mr-2" />
-                Copiar
-              </Button>
-              <Button onClick={openBookingPage} disabled={!barbershopSlug} variant="outline">
-                <ExternalLink className="h-4 w-4" />
-              </Button>
-            </div>
-            {barbershopSlug && (
-              <p className="text-xs text-muted-foreground mt-2">
-                Seu link personalizado: <span className="text-primary font-medium">{barbershopSlug}</span>
-              </p>
+            {!barbershopSlug ? (
+              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 mb-4">
+                <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                  ⚠️ Configure seu link personalizado nas configurações para compartilhar com seus clientes.
+                </p>
+                <Button 
+                  onClick={() => navigate("/settings")} 
+                  variant="outline" 
+                  className="mt-2"
+                >
+                  Ir para Configurações
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div className="flex gap-2">
+                  <Input
+                    readOnly
+                    value={`${window.location.origin}/book/${barbershopSlug}`}
+                    className="flex-1 bg-background"
+                  />
+                  <Button onClick={copyBookingLink}>
+                    <Copy className="h-4 w-4 mr-2" />
+                    Copiar
+                  </Button>
+                  <Button onClick={openBookingPage} variant="outline">
+                    <ExternalLink className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Seu link personalizado: <span className="text-primary font-medium">{barbershopSlug}</span>
+                </p>
+              </>
             )}
           </Card>
         </div>

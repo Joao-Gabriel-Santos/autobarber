@@ -73,8 +73,8 @@ export type Database = {
           slug: string
         }
         Insert: {
-          barber_id?: string
-          barbershop_name?: string
+          barber_id: string
+          barbershop_name: string
           barber_name?: string | null
           created_at?: string
           updated_at?: string
