@@ -225,7 +225,7 @@ const Dashboard = () => {
               <span className="text-muted-foreground text-sm">Receita do Dia</span>
               <TrendingUp className="h-4 w-4 text-primary" />
             </div>
-            <p className="text-3xl font-bold">{receitaHoje}</p>
+            <p className="text-3xl font-bold">R${receitaHoje}</p>
           </div>
 
           <div className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all">
@@ -233,7 +233,7 @@ const Dashboard = () => {
               <span className="text-muted-foreground text-sm">Taxa de Confirmação</span>
               <TrendingUp className="h-4 w-4 text-primary" />
             </div>
-            <p className="text-3xl font-bold">{taxaConfirmacao}</p>
+            <p className="text-3xl font-bold">{taxaConfirmacao}%</p>
           </div>
         </div>
 
