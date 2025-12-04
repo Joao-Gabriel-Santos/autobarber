@@ -370,7 +370,7 @@ const Settings = () => {
                       className="cursor-pointer"
                     />
                     <p className="text-xs text-muted-foreground text-center">
-                      Logo ou foto do barbeiro
+                      Logo ou foto do barbeiro (Proporção 1:1)
                     </p>
                   </div>
                 </div>
@@ -403,7 +403,7 @@ const Settings = () => {
                       className="cursor-pointer"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Foto do ambiente da barbearia
+                      Foto do ambiente da barbearia (Proporção 16:9)
                     </p>
                   </div>
                 </div>

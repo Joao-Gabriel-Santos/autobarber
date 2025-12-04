@@ -284,6 +284,7 @@ const Services = () => {
                     className="mt-2 w-20 h-20 object-cover rounded-lg"
                   />
                 )}
+                <p className="text-xs text-muted-foreground">Proporção 4:3</p>
               </div>
             </div>
 
