@@ -25,6 +25,12 @@ interface WorkingHour {
   end_time: string;
 }
 
+interface Break {
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+}
+
 interface BarbershopData {
   id: string;
   user_id: string;
@@ -40,6 +46,7 @@ const BookAppointment = () => {
   const [loading, setLoading] = useState(true);
   const [services, setServices] = useState<Service[]>([]);
   const [workingHours, setWorkingHours] = useState<WorkingHour[]>([]);
+  const [breaks, setBreaks] = useState<Break[]>([]);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>();
   const [selectedTime, setSelectedTime] = useState<string>("");
@@ -84,7 +91,6 @@ const BookAppointment = () => {
     try {
       console.log("Searching for slug:", barberSlug);
       
-      // Tentar buscar diretamente da tabela primeiro (para debug)
       const { data: directData, error: directError } = await supabase
         .from("barbershops")
         .select("*")
@@ -103,7 +109,6 @@ const BookAppointment = () => {
         return;
       }
 
-      // Buscar nome do barbeiro no profiles
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("full_name")
@@ -121,7 +126,6 @@ const BookAppointment = () => {
         slug: directData.slug
       };
       
-      // Buscar avatar e banner do storage
       const { data: { publicUrl: avatarUrl } } = supabase
         .storage
         .from('avatars')
@@ -132,15 +136,14 @@ const BookAppointment = () => {
         .from('banners')
         .getPublicUrl(`${barbershopData.barber_id}/banner.png`);
 
-      setBarbershopInfo( {
+      setBarbershopInfo({
         id: barbershopData.barber_id,
         user_id: barbershopData.barber_id,
         name: barbershopData.barbershop_name,
         slug: barbershopData.slug,
         avatar_url: avatarUrl,
         banner_url: bannerUrl,
-      })
-
+      });
 
       // Load services
       const { data: servicesData, error: servicesError } = await supabase
@@ -161,6 +164,18 @@ const BookAppointment = () => {
 
       if (hoursError) throw hoursError;
       setWorkingHours(hoursData || []);
+
+      // Load breaks
+      const { data: breaksData, error: breaksError } = await supabase
+        .from("breaks")
+        .select("*")
+        .eq("barber_id", barbershopData.barber_id);
+
+      if (breaksError) {
+        console.log("Breaks table error:", breaksError);
+      } else {
+        setBreaks(breaksData || []);
+      }
     } catch (error: any) {
       toast({
         title: "Erro ao carregar dados",
@@ -170,6 +185,22 @@ const BookAppointment = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const isTimeInBreak = (timeInMinutes: number, dayOfWeek: number): boolean => {
+    const dayBreaks = breaks.filter(b => b.day_of_week === dayOfWeek);
+    
+    for (const brk of dayBreaks) {
+      const [breakStartHour, breakStartMinute] = brk.start_time.split(':').map(Number);
+      const [breakEndHour, breakEndMinute] = brk.end_time.split(':').map(Number);
+      const breakStart = breakStartHour * 60 + breakStartMinute;
+      const breakEnd = breakEndHour * 60 + breakEndMinute;
+
+      if (timeInMinutes >= breakStart && timeInMinutes < breakEnd) {
+        return true;
+      }
+    }
+    return false;
   };
 
   const generateAvailableTimes = async () => {
@@ -191,20 +222,17 @@ const BookAppointment = () => {
       .eq("appointment_date", format(selectedDate, "yyyy-MM-dd"))
       .in("status", ["pending", "confirmed"]);
 
-    const bookedSlots = new Set<string>();
+    // Criar array de minutos ocupados (mais eficiente para verificação)
+    const occupiedMinutes = new Set<number>();
     
-    // Marcar todos os horários ocupados incluindo a duração do serviço
     existingAppointments?.forEach((apt: any) => {
       const [hour, minute] = apt.appointment_time.split(':').map(Number);
       const startTime = hour * 60 + minute;
       const duration = apt.services?.duration || 0;
       
-      // Bloquear todos os slots que se sobrepõem
-      for (let i = 0; i < duration; i += 30) {
-        const blockedTime = startTime + i;
-        const blockedHour = Math.floor(blockedTime / 60);
-        const blockedMinute = blockedTime % 60;
-        bookedSlots.add(`${blockedHour.toString().padStart(2, '0')}:${blockedMinute.toString().padStart(2, '0')}`);
+      // Marcar cada minuto ocupado pelo agendamento
+      for (let i = 0; i < duration; i++) {
+        occupiedMinutes.add(startTime + i);
       }
     });
 
@@ -214,20 +242,29 @@ const BookAppointment = () => {
 
     let currentTime = startHour * 60 + startMinute;
     const endTime = endHour * 60 + endMinute;
+    const serviceDuration = selectedService.duration;
 
-    while (currentTime + selectedService.duration <= endTime) {
+    // Usar a duração do serviço como intervalo entre slots
+    while (currentTime + serviceDuration <= endTime) {
       const hour = Math.floor(currentTime / 60);
       const minute = currentTime % 60;
       const timeSlot = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
       
-      // Verificar se este slot ou qualquer slot durante a duração do serviço está ocupado
+      // Verificar se todo o período necessário está disponível
       let isAvailable = true;
-      for (let i = 0; i < selectedService.duration; i += 30) {
+      
+      // Verificar cada minuto do serviço
+      for (let i = 0; i < serviceDuration; i++) {
         const checkTime = currentTime + i;
-        const checkHour = Math.floor(checkTime / 60);
-        const checkMinute = checkTime % 60;
-        const checkSlot = `${checkHour.toString().padStart(2, '0')}:${checkMinute.toString().padStart(2, '0')}`;
-        if (bookedSlots.has(checkSlot)) {
+        
+        // Verificar se está ocupado
+        if (occupiedMinutes.has(checkTime)) {
+          isAvailable = false;
+          break;
+        }
+        
+        // Verificar se está em intervalo
+        if (isTimeInBreak(checkTime, dayOfWeek)) {
           isAvailable = false;
           break;
         }
@@ -237,7 +274,8 @@ const BookAppointment = () => {
         times.push(timeSlot);
       }
       
-      currentTime += 30;
+      // IMPORTANTE: Incrementar pela duração do serviço
+      currentTime += serviceDuration;
     }
 
     setAvailableTimes(times);

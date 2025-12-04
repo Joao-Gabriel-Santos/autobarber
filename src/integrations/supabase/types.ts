@@ -13,6 +13,33 @@ export type Database = {
   
   public: {
     Tables: {
+      breaks: {
+        Row: {
+          id: string
+          barber_id: string
+          day_of_week: number
+          start_time: string
+          end_time: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          barber_id: string
+          day_of_week: number
+          start_time: string
+          end_time: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          barber_id?: string
+          day_of_week?: number
+          start_time?: string
+          end_time?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
       appointments: {
         Row: {
           id: string

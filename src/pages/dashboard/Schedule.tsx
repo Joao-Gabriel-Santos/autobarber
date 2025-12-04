@@ -19,6 +19,7 @@ interface WorkingHour {
 
 interface Break {
   id: string;
+  day_of_week: number;
   start_time: string;
   end_time: string;
 }
@@ -55,6 +56,7 @@ const Schedule = () => {
       }
       setUser(user);
       await loadSchedule(user.id);
+      await loadBreaks(user.id);
     } catch (error) {
       console.error("Error:", error);
       navigate("/login");
@@ -85,6 +87,28 @@ const Schedule = () => {
     setWorkingHours(hoursMap);
   };
 
+  const loadBreaks = async (userId: string) => {
+    // Primeiro, verificar se a tabela existe
+    const { data, error } = await supabase
+      .from("breaks")
+      .select("*")
+      .eq("barber_id", userId);
+
+    if (error) {
+      console.log("Breaks table might not exist yet:", error);
+      return;
+    }
+
+    const breaksMap: Record<number, Break[]> = {};
+    data?.forEach((item) => {
+      if (!breaksMap[item.day_of_week]) {
+        breaksMap[item.day_of_week] = [];
+      }
+      breaksMap[item.day_of_week].push(item);
+    });
+    setBreaks(breaksMap);
+  };
+
   const updateWorkingHour = (dayOfWeek: number, field: keyof WorkingHour, value: any) => {
     setWorkingHours(prev => ({
       ...prev,
@@ -102,7 +126,12 @@ const Schedule = () => {
       ...prev,
       [dayOfWeek]: [
         ...(prev[dayOfWeek] || []),
-        { id: `temp-${Date.now()}`, start_time: "", end_time: "" }
+        { 
+          id: `temp-${Date.now()}`, 
+          day_of_week: dayOfWeek,
+          start_time: "", 
+          end_time: "" 
+        }
       ]
     }));
   };
@@ -179,12 +208,35 @@ const Schedule = () => {
         }
       }
 
+      // Deletar intervalos antigos e inserir novos
+      await supabase
+        .from("breaks")
+        .delete()
+        .eq("barber_id", user.id);
+
+      // Inserir novos intervalos
+      for (const [dayStr, dayBreaks] of Object.entries(breaks)) {
+        for (const brk of dayBreaks) {
+          if (brk.start_time && brk.end_time) {
+            await supabase
+              .from("breaks")
+              .insert({
+                barber_id: user.id,
+                day_of_week: parseInt(dayStr),
+                start_time: brk.start_time,
+                end_time: brk.end_time,
+              });
+          }
+        }
+      }
+
       toast({
         title: "Horários salvos com sucesso!",
         description: "Todos os horários e intervalos foram atualizados.",
       });
 
       await loadSchedule(user.id);
+      await loadBreaks(user.id);
     } catch (error: any) {
       toast({
         title: "Erro ao salvar horários",
@@ -285,7 +337,7 @@ const Schedule = () => {
                     {/* Intervalos */}
                     <div className="border-t border-border pt-4">
                       <div className="flex items-center justify-between mb-3">
-                        <Label className="text-sm font-semibold">Intervalos</Label>
+                        <Label className="text-sm font-semibold">Intervalos (Almoço, Pausas, etc.)</Label>
                         <Button
                           type="button"
                           size="sm"
