@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import { ArrowLeft, Settings as SettingsIcon, User, Image as ImageIcon, Link as LinkIcon } from "lucide-react";
+import { ArrowLeft, Settings as SettingsIcon, User, Image as ImageIcon, Link as LinkIcon, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const Settings = () => {
   const navigate = useNavigate();
@@ -16,7 +17,7 @@ const Settings = () => {
   const [barbershopId, setBarbershopId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState<string | null>(null);
-  const [savingSlug, setSavingSlug] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
     barbershopName: "",
     fullName: "",
@@ -43,14 +44,12 @@ const Settings = () => {
       
       setUser(user);
       
-      // Buscar dados do profile
       const { data: profile } = await supabase
         .from("profiles")
         .select("*")
         .eq("id", user.id)
         .single();
       
-      // Buscar dados da barbearia usando barber_id
       const { data: barbershop, error: barbershopError } = await supabase
         .from("barbershops")
         .select("*")
@@ -70,7 +69,6 @@ const Settings = () => {
       if (barbershop) {
         setBarbershopId(barbershop.barber_id);
         
-        // Buscar URLs das imagens com cache-busting
         const timestamp = new Date().getTime();
         const { data: { publicUrl: avatarUrl } } = supabase
           .storage
@@ -114,12 +112,10 @@ const Settings = () => {
       const bucketName = type === 'avatar' ? 'avatars' : 'banners';
       const fileName = `${user.id}/${type}.png`;
 
-      // Deletar a imagem antiga primeiro
       await supabase.storage
         .from(bucketName)
         .remove([fileName]);
 
-      // Fazer upload da nova imagem
       const { error: uploadError } = await supabase.storage
         .from(bucketName)
         .upload(fileName, file, {
@@ -130,7 +126,6 @@ const Settings = () => {
 
       if (uploadError) throw uploadError;
 
-      // Adicionar timestamp para forçar atualização do cache
       const timestamp = new Date().getTime();
       const { data: { publicUrl } } = supabase.storage
         .from(bucketName)
@@ -157,80 +152,13 @@ const Settings = () => {
     }
   };
 
-  const validateSlug = (slug: string): boolean => {
-    // Slug deve ter apenas letras minúsculas, números e hífens
-    const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-    return slugRegex.test(slug) && slug.length >= 3 && slug.length <= 50;
-  };
-
-  const handleSlugChange = (value: string) => {
-    // Converter para formato válido automaticamente
-    const normalized = value
-      .toLowerCase()
-      .replace(/[^a-z0-9-]/g, '-') // Substituir caracteres inválidos por hífen
-      .replace(/-+/g, '-') // Remover hífens duplicados
-      .replace(/^-|-$/g, ''); // Remover hífens do início e fim
-    
-    setFormData(prev => ({ ...prev, slug: normalized }));
-  };
-
-  const handleSaveSlug = async () => {
-    if (!user || !barbershopId) return;
-
-    if (!validateSlug(formData.slug)) {
-      toast({
-        title: "Slug inválido",
-        description: "O slug deve ter entre 3 e 50 caracteres e conter apenas letras minúsculas, números e hífens.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setSavingSlug(true);
-
-    try {
-      // Verificar se o slug já existe
-      const { data: existingBarbershop } = await supabase
-        .from("barbershops")
-        .select("barber_id")
-        .eq("slug", formData.slug)
-        .neq("barber_id", barbershopId)
-        .single();
-
-      if (existingBarbershop) {
-        toast({
-          title: "Slug já em uso",
-          description: "Este slug já está sendo usado por outra barbearia. Escolha outro.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const { error } = await supabase
-        .from("barbershops")
-        .update({ slug: formData.slug })
-        .eq("barber_id", barbershopId);
-
-      if (error) throw error;
-
-      toast({
-        title: "Slug atualizado!",
-        description: "Seu link personalizado foi atualizado com sucesso.",
-      });
-    } catch (error: any) {
-      toast({
-        title: "Erro ao atualizar slug",
-        description: error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setSavingSlug(false);
-    }
-  };
-
   const handleSave = async () => {
+    if (!user || !barbershopId) return;
+    
+    setSaving(true);
+    
     try {
-      // 1️⃣ Atualizar profile (dados pessoais)
+      // 1️⃣ Atualizar profile
       const { error: profileError } = await supabase
         .from("profiles")
         .upsert({
@@ -241,7 +169,7 @@ const Settings = () => {
 
       if (profileError) throw profileError;
 
-      // 2️⃣ Atualizar barbershop (dados da barbearia)
+      // 2️⃣ Atualizar barbershop (o slug será atualizado automaticamente pelo trigger)
       const { error: barbershopError } = await supabase
         .from("barbershops")
         .update({
@@ -251,15 +179,8 @@ const Settings = () => {
 
       if (barbershopError) throw barbershopError;
 
-      // 3️⃣ Atualizar metadata do auth também
-      const { error: authError } = await supabase.auth.updateUser({
-        data: {
-          full_name: formData.fullName,
-          whatsapp: formData.whatsapp,
-        }
-      });
-
-      if (authError) console.error("Auth metadata update error:", authError);
+      // 3️⃣ Recarregar dados para pegar o novo slug gerado
+      await checkUser();
 
       toast({
         title: "Configurações salvas!",
@@ -271,6 +192,8 @@ const Settings = () => {
         description: error.message,
         variant: "destructive",
       });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -306,36 +229,28 @@ const Settings = () => {
               <LinkIcon className="h-6 w-6 text-primary" />
               Link Personalizado
             </h2>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="slug">Seu Link Único</Label>
-                <p className="text-sm text-muted-foreground mb-2">
-                  Este será o link que seus clientes usarão para fazer agendamentos. 
-                  Use apenas letras minúsculas, números e hífens.
-                </p>
-                <div className="flex gap-2">
-                  <div className="flex-1 flex items-center gap-2 bg-background border border-border rounded-md px-3">
-                    <span className="text-muted-foreground text-sm">
-                      {window.location.origin}/book/
-                    </span>
-                    <Input
-                      id="slug"
-                      value={formData.slug}
-                      onChange={(e) => handleSlugChange(e.target.value)}
-                      placeholder="minha-barbearia"
-                      className="border-0 p-0 h-auto focus-visible:ring-0"
-                    />
-                  </div>
-                  <Button onClick={handleSaveSlug} disabled={savingSlug}>
-                    {savingSlug ? "Salvando..." : "Salvar"}
-                  </Button>
-                </div>
-                {formData.slug && (
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Seu link: <span className="text-primary font-medium">{window.location.origin}/book/{formData.slug}</span>
-                  </p>
-                )}
+            <Alert className="mb-4">
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                O link é gerado automaticamente a partir do nome da sua barbearia. 
+                Para alterá-lo, mude o nome da barbearia abaixo e salve.
+              </AlertDescription>
+            </Alert>
+            <div className="space-y-2">
+              <Label>Seu Link Único (Gerado Automaticamente)</Label>
+              <div className="flex items-center gap-2 bg-background border border-border rounded-md px-3 py-2">
+                <span className="text-sm text-muted-foreground">
+                  {window.location.origin}/book/
+                </span>
+                <span className="text-sm font-medium text-primary">
+                  {formData.slug || "seu-link-aqui"}
+                </span>
               </div>
+              {formData.slug && (
+                <p className="text-xs text-muted-foreground">
+                  ✨ Este link é atualizado automaticamente quando você muda o nome da barbearia
+                </p>
+              )}
             </div>
           </div>
 
@@ -422,6 +337,9 @@ const Settings = () => {
                   onChange={(e) => setFormData(prev => ({ ...prev, barbershopName: e.target.value }))}
                   className="bg-background"
                 />
+                <p className="text-xs text-muted-foreground">
+                  💡 Mudar o nome atualiza automaticamente seu link personalizado
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -484,8 +402,8 @@ const Settings = () => {
           </div>
 
           <div className="flex gap-4 pt-6">
-            <Button onClick={handleSave} className="flex-1 shadow-gold">
-              Salvar Alterações
+            <Button onClick={handleSave} className="flex-1 shadow-gold" disabled={saving}>
+              {saving ? "Salvando..." : "Salvar Alterações"}
             </Button>
             <Button variant="outline" onClick={() => navigate("/dashboard")}>
               Cancelar

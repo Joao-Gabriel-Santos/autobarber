@@ -24,14 +24,16 @@ const Signup = () => {
 
     try {
       // 1️⃣ Criar usuário no Auth com metadata
+      // O trigger handle_new_user() criará o profile E a barbearia automaticamente
       const { data, error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
         options: {
-          emailRedirectTo: `${window.location.origin}/confirm-email`,
+          emailRedirectTo: `${window.location.origin}/login`,
           data: {
             full_name: formData.barberName,
             whatsapp: formData.whatsapp,
+            barbershop_name: formData.barbershopName, // 👈 Adicionar nome da barbearia
           }
         },
       });
@@ -39,52 +41,15 @@ const Signup = () => {
       if (error) throw error;
       if (!data.user) throw new Error("Usuário não foi criado.");
 
-      // Aguardar um pouco para o trigger criar o profile
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // 2️⃣ Verificar se profile foi criado, se não, criar
-      const { data: existingProfile } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("id", data.user.id)
-        .maybeSingle();
-
-      if (!existingProfile) {
-        console.log("Profile not created by trigger, creating manually...");
-        const { error: profileError } = await supabase
-          .from("profiles")
-          .insert({
-            id: data.user.id,
-            full_name: formData.barberName,
-            whatsapp: formData.whatsapp,
-          });
-
-        if (profileError) {
-          console.error("Error creating profile:", profileError);
-          toast({
-            title: "Aviso",
-            description: "Perfil não foi criado automaticamente. Configure-o nas configurações.",
-            variant: "default",
-          });
-        }
-      }
-
-      // 3️⃣ Criar barbearia vinculada ao usuário
-      const { error: insertError } = await supabase.from("barbershops").insert({
-        barber_id: data.user.id,
-        barbershop_name: formData.barbershopName,
-        slug: '', // Será configurado depois nas settings
-      });
-
-      if (insertError) throw insertError;
-
+      // 2️⃣ O trigger do banco de dados criou tudo automaticamente!
       toast({
-        title: "Conta criada!",
+        title: "Conta criada com sucesso!",
         description: "Verifique seu e-mail para confirmar e acessar o sistema.",
       });
 
       navigate("/login");
     } catch (error: any) {
+      console.error("Signup error:", error);
       toast({
         title: "Erro ao criar conta",
         description: error.message || "Tente novamente mais tarde",
