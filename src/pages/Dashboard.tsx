@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Calendar, Settings, TrendingUp, LogOut, Copy, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import WalkInAppointment from "@/components/WalkInAppointment";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -18,7 +19,6 @@ const Dashboard = () => {
   const [totalHoje, setTotalHoje] = useState(0);
   const [receitaHoje, setReceitaHoje] = useState(0);
   const [taxaConfirmacao, setTaxaConfirmacao] = useState(0);
-
 
   useEffect(() => {
     checkUser();
@@ -41,7 +41,6 @@ const Dashboard = () => {
 
       setUser(user);
 
-      // Buscar dados do profile
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("full_name")
@@ -52,7 +51,6 @@ const Dashboard = () => {
         console.error("Error loading profile:", profileError);
       }
 
-      // Buscar dados da barbearia
       const { data: barbershop, error: barbershopError } = await supabase
         .from("barbershops")
         .select("slug, barbershop_name")
@@ -127,6 +125,16 @@ const Dashboard = () => {
     return { totalHoje, receitaHoje, taxaConfirmacao };
   };
 
+  const refreshStats = async () => {
+    if (user) {
+      const stats = await loadDashboardStats(user.id);
+      if (stats) {
+        setTotalHoje(stats.totalHoje);
+        setReceitaHoje(stats.receitaHoje);
+        setTaxaConfirmacao(stats.taxaConfirmacao);
+      }
+    }
+  };
 
   const copyBookingLink = () => {
     if (!barbershopSlug) {
@@ -201,13 +209,23 @@ const Dashboard = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2">
-            Olá, <span className="text-primary">{fullName || "Barbeiro"}</span>
-          </h1>
-          <p className="text-muted-foreground">
-            Bem-vindo ao painel da {barbershopName || "sua barbearia"}
-          </p>
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-bold mb-2">
+              Olá, <span className="text-primary">{fullName || "Barbeiro"}</span>
+            </h1>
+            <p className="text-muted-foreground">
+              Bem-vindo ao painel da {barbershopName || "sua barbearia"}
+            </p>
+          </div>
+          
+          {/* Botão de Entrada Direta */}
+          {user && (
+            <WalkInAppointment 
+              barberId={user.id} 
+              onSuccess={refreshStats}
+            />
+          )}
         </div>
 
         {/* Quick Stats */}
@@ -225,7 +243,7 @@ const Dashboard = () => {
               <span className="text-muted-foreground text-sm">Receita do Dia</span>
               <TrendingUp className="h-4 w-4 text-primary" />
             </div>
-            <p className="text-3xl font-bold">R${receitaHoje}</p>
+            <p className="text-3xl font-bold">R${receitaHoje.toFixed(2)}</p>
           </div>
 
           <div className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all">
