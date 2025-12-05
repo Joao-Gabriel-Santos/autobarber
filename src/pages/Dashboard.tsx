@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Calendar, Settings, TrendingUp, LogOut, Copy, ExternalLink } from "lucide-react";
+import { Calendar, Settings, TrendingUp, LogOut, Copy, ExternalLink, DollarSign } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import WalkInAppointment from "@/components/WalkInAppointment";
 
@@ -295,7 +295,19 @@ const Dashboard = () => {
               Visualize e gerencie seus agendamentos
             </p>
           </div>
-        </div>
+          <div
+              className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
+              onClick={() => navigate("/dashboard/finance")}
+            >
+              <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <DollarSign className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="font-bold text-xl mb-2">Financeiro</h3>
+              <p className="text-muted-foreground text-sm">
+                Análise detalhada de receitas e métricas
+              </p>
+            </div>
+          </div>
 
         {/* Public Link */}
         <div className="mt-8">

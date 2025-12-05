@@ -17,6 +17,7 @@ import NotFound from "./pages/NotFound";
 import ConfirmEmail from "./pages/ConfirmEmail";
 import UpdatePassword from "./pages/UpdatePassword";
 import ForgotPassword from "./pages/ForgotPassword";
+import Finance from "./pages/dashboard/Finance"
 
 
 const queryClient = new QueryClient();
@@ -35,6 +36,7 @@ const App = () => (
           <Route path="/dashboard/services" element={<Services />} />
           <Route path="/dashboard/schedule" element={<Schedule />} />
           <Route path="/dashboard/appointments" element={<Appointments />} />
+          <Route path="/dashboard/finance" element={<Finance />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/book/:barberSlug" element={<BookAppointment />} />
           <Route path="/meus-agendamentos" element={<ClientAppointments />} />
