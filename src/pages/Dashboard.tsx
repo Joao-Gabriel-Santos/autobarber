@@ -110,7 +110,7 @@ const Dashboard = () => {
     const totalHoje = data.length;
 
     const receitaHoje = data
-      .filter(a => a.status === "completed" || a.status === "confirmed")
+      .filter(a => a.status === "completed")
       .reduce((sum, a) => sum + (a.price || 0), 0);
 
     const taxaConfirmacao =
