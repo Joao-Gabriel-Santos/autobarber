@@ -153,6 +153,170 @@ const Index = () => {
         </div>
       </section>
 
+      {/* Pricing Section */}
+      <section className="container mx-auto px-4 py-20">
+        <div className="text-center mb-12">
+          <h2 className="text-4xl md:text-5xl font-bold mb-4">
+            Escolha o plano <span className="text-primary">ideal</span>
+          </h2>
+          <p className="text-xl text-muted-foreground">
+            Sem taxas ocultas. Cancele quando quiser.
+          </p>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+          {/* Plano Starter */}
+          <div className="bg-card border border-border rounded-2xl p-8 hover:border-primary/50 transition-all">
+            <div className="text-center mb-6">
+              <h3 className="text-2xl font-bold mb-2">Starter</h3>
+              <p className="text-muted-foreground text-sm mb-4">
+                Para quem quer controle financeiro
+              </p>
+              <div className="mb-6">
+                <span className="text-4xl font-bold text-primary">R$ 27</span>
+                <span className="text-muted-foreground">/mês</span>
+              </div>
+            </div>
+            
+            <ul className="space-y-3 mb-8">
+              <li className="flex items-start gap-2">
+                <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                <span className="text-sm">Entrada Direta (Walk-in)</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                <span className="text-sm">Controle financeiro completo</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                <span className="text-sm">Relatórios e métricas</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                <span className="text-sm">1 barbeiro</span>
+              </li>
+              <li className="flex items-start gap-2 opacity-50">
+                <span className="h-5 w-5 flex-shrink-0 mt-0.5">❌</span>
+                <span className="text-sm line-through">Agendamento online</span>
+              </li>
+            </ul>
+
+            <Button 
+              className="w-full"
+              variant="outline"
+              onClick={() => navigate("/signup?plan=starter")}
+            >
+              Começar com Starter
+            </Button>
+          </div>
+
+          {/* Plano Pro - DESTAQUE */}
+          <div className="bg-card border-2 border-primary rounded-2xl p-8 relative transform md:scale-105 shadow-gold">
+            <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground px-4 py-1 rounded-full text-sm font-bold">
+              MAIS POPULAR
+            </div>
+            
+            <div className="text-center mb-6">
+              <h3 className="text-2xl font-bold mb-2">Pro</h3>
+              <p className="text-muted-foreground text-sm mb-4">
+                Para barbearias solo
+              </p>
+              <div className="mb-6">
+                <span className="text-4xl font-bold text-primary">R$ 57</span>
+                <span className="text-muted-foreground">/mês</span>
+              </div>
+            </div>
+            
+            <ul className="space-y-3 mb-8">
+              <li className="flex items-start gap-2">
+                <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                <span className="text-sm">Tudo do Starter, mais:</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                <span className="text-sm">Agendamento online</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                <span className="text-sm">Link personalizado</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                <span className="text-sm">Lembretes automáticos</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                <span className="text-sm">Sistema anti-faltas</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                <span className="text-sm">1 barbeiro</span>
+              </li>
+            </ul>
+
+            <Button 
+              className="w-full shadow-gold"
+              onClick={() => navigate("/signup?plan=pro")}
+            >
+              Começar com Pro
+            </Button>
+          </div>
+
+          {/* Plano Master */}
+          <div className="bg-card border border-border rounded-2xl p-8 hover:border-primary/50 transition-all">
+            <div className="text-center mb-6">
+              <h3 className="text-2xl font-bold mb-2">Master</h3>
+              <p className="text-muted-foreground text-sm mb-4">
+                Para barbearias com equipe
+              </p>
+              <div className="mb-6">
+                <span className="text-4xl font-bold text-primary">R$ 97</span>
+                <span className="text-muted-foreground">/mês</span>
+              </div>
+            </div>
+            
+            <ul className="space-y-3 mb-8">
+              <li className="flex items-start gap-2">
+                <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                <span className="text-sm">Tudo do Pro, mais:</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                <span className="text-sm">Até 5 barbeiros</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                <span className="text-sm">Gestão de equipe</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                <span className="text-sm">Relatórios avançados</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                <span className="text-sm">Dashboard unificado</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                <span className="text-sm">Suporte prioritário</span>
+              </li>
+            </ul>
+
+            <Button 
+              className="w-full"
+              variant="outline"
+              onClick={() => navigate("/signup?plan=master")}
+            >
+              Começar com Master
+            </Button>
+          </div>
+        </div>
+
+        <p className="text-center text-sm text-muted-foreground mt-8">
+          💳 Pagamento seguro via Stripe • 🔒 Cancele quando quiser • ✨ 7 dias grátis em todos os planos
+        </p>
+      </section>
+
       {/* CTA */}
       <section className="container mx-auto px-4 py-20">
         <div className="max-w-4xl mx-auto text-center bg-gradient-gold rounded-2xl p-12 md:p-16">
@@ -168,7 +332,28 @@ const Index = () => {
             className="text-lg h-14 px-8"
             onClick={() => navigate("/signup")}
           >
-            Começar agora - É grátis
+            Começar agora - 7 dias grátis
+            <ArrowRight className="ml-2 h-5 w-5" />
+          </Button>
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section className="container mx-auto px-4 py-20">
+        <div className="max-w-4xl mx-auto text-center bg-gradient-gold rounded-2xl p-12 md:p-16">
+          <h2 className="text-4xl md:text-5xl font-bold mb-4 text-primary-foreground">
+            Pronto para transformar sua barbearia?
+          </h2>
+          <p className="text-xl mb-8 text-primary-foreground/90">
+            Junte-se a centenas de barbeiros que já automatizaram seus agendamentos
+          </p>
+          <Button 
+            size="lg" 
+            variant="secondary"
+            className="text-lg h-14 px-8"
+            onClick={() => navigate("/signup")}
+          >
+            Começar agora
             <ArrowRight className="ml-2 h-5 w-5" />
           </Button>
         </div>
