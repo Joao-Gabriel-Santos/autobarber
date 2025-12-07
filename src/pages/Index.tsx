@@ -332,27 +332,6 @@ const Index = () => {
             className="text-lg h-14 px-8"
             onClick={() => navigate("/signup")}
           >
-            Começar agora - 7 dias grátis
-            <ArrowRight className="ml-2 h-5 w-5" />
-          </Button>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="container mx-auto px-4 py-20">
-        <div className="max-w-4xl mx-auto text-center bg-gradient-gold rounded-2xl p-12 md:p-16">
-          <h2 className="text-4xl md:text-5xl font-bold mb-4 text-primary-foreground">
-            Pronto para transformar sua barbearia?
-          </h2>
-          <p className="text-xl mb-8 text-primary-foreground/90">
-            Junte-se a centenas de barbeiros que já automatizaram seus agendamentos
-          </p>
-          <Button 
-            size="lg" 
-            variant="secondary"
-            className="text-lg h-14 px-8"
-            onClick={() => navigate("/signup")}
-          >
             Começar agora
             <ArrowRight className="ml-2 h-5 w-5" />
           </Button>
