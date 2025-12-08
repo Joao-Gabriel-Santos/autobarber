@@ -20,9 +20,38 @@ const Dashboard = () => {
   const [receitaHoje, setReceitaHoje] = useState(0);
   const [taxaConfirmacao, setTaxaConfirmacao] = useState(0);
 
-  useEffect(() => {
-    checkUser();
-  }, []);
+  // ✅ DECLARAR A FUNÇÃO ANTES DE USAR
+  const loadDashboardStats = async (userId: string) => {
+    const today = new Date().toISOString().split("T")[0];
+
+    const { data, error } = await supabase
+      .from("appointments")
+      .select("status, appointment_date, price")
+      .eq("barber_id", userId)
+      .eq("appointment_date", today);
+
+    if (error) {
+      console.error(error);
+      return null;
+    }
+
+    const totalHoje = data.length;
+
+    const receitaHoje = data
+      .filter(a => a.status === "completed")
+      .reduce((sum, a) => sum + (a.price || 0), 0);
+
+    const taxaConfirmacao =
+      totalHoje === 0
+        ? 0
+        : Math.round(
+          (data.filter(a => a.status === "confirmed" || a.status === "completed").length /
+            totalHoje) *
+          100
+        );
+
+    return { totalHoje, receitaHoje, taxaConfirmacao };
+  };
 
   const checkUser = async () => {
     try {
@@ -32,6 +61,8 @@ const Dashboard = () => {
         navigate("/login");
         return;
       }
+
+      // ✅ AGORA PODE CHAMAR A FUNÇÃO
       const stats = await loadDashboardStats(user.id);
       if (stats) {
         setTotalHoje(stats.totalHoje);
@@ -77,6 +108,21 @@ const Dashboard = () => {
     }
   };
 
+  const refreshStats = async () => {
+    if (user) {
+      const stats = await loadDashboardStats(user.id);
+      if (stats) {
+        setTotalHoje(stats.totalHoje);
+        setReceitaHoje(stats.receitaHoje);
+        setTaxaConfirmacao(stats.taxaConfirmacao);
+      }
+    }
+  };
+
+  useEffect(() => {
+    checkUser();
+  }, []);
+
   const handleLogout = async () => {
     try {
       await supabase.auth.signOut();
@@ -90,49 +136,6 @@ const Dashboard = () => {
         title: "Erro ao fazer logout",
         variant: "destructive",
       });
-    }
-  };
-
-  const loadDashboardStats = async (userId: string) => {
-    const today = new Date().toISOString().split("T")[0];
-
-    const { data, error } = await supabase
-      .from("appointments")
-      .select("status, appointment_date, price")
-      .eq("barber_id", userId)
-      .eq("appointment_date", today);
-
-    if (error) {
-      console.error(error);
-      return;
-    }
-
-    const totalHoje = data.length;
-
-    const receitaHoje = data
-      .filter(a => a.status === "completed")
-      .reduce((sum, a) => sum + (a.price || 0), 0);
-
-    const taxaConfirmacao =
-      totalHoje === 0
-        ? 0
-        : Math.round(
-          (data.filter(a => a.status === "confirmed" || a.status === "completed").length /
-            totalHoje) *
-          100
-        );
-
-    return { totalHoje, receitaHoje, taxaConfirmacao };
-  };
-
-  const refreshStats = async () => {
-    if (user) {
-      const stats = await loadDashboardStats(user.id);
-      if (stats) {
-        setTotalHoje(stats.totalHoje);
-        setReceitaHoje(stats.receitaHoje);
-        setTaxaConfirmacao(stats.taxaConfirmacao);
-      }
     }
   };
 
@@ -295,19 +298,20 @@ const Dashboard = () => {
               Visualize e gerencie seus agendamentos
             </p>
           </div>
+
           <div
-              className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
-              onClick={() => navigate("/dashboard/finance")}
-            >
-              <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                <DollarSign className="h-6 w-6 text-primary" />
-              </div>
-              <h3 className="font-bold text-xl mb-2">Financeiro</h3>
-              <p className="text-muted-foreground text-sm">
-                Análise detalhada de receitas e métricas
-              </p>
+            className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
+            onClick={() => navigate("/dashboard/finance")}
+          >
+            <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+              <DollarSign className="h-6 w-6 text-primary" />
             </div>
+            <h3 className="font-bold text-xl mb-2">Financeiro</h3>
+            <p className="text-muted-foreground text-sm">
+              Análise detalhada de receitas e métricas
+            </p>
           </div>
+        </div>
 
         {/* Public Link */}
         <div className="mt-8">

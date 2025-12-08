@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,9 +7,24 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
 const PLANS = {
-  starter: { name: "Starter", price: 27, features: ["Entrada Direta", "Controle Financeiro", "1 Barbeiro"] },
-  pro: { name: "Pro", price: 57, features: ["Agendamento Online", "Link Personalizado", "Lembretes", "1 Barbeiro"] },
-  master: { name: "Master", price: 97, features: ["Até 5 Barbeiros", "Gestão de Equipe", "Relatórios Avançados"] },
+  starter: { 
+    name: "Starter", 
+    price: 27, 
+    features: ["Entrada Direta", "Controle Financeiro", "1 Barbeiro"],
+    priceId: import.meta.env.VITE_STRIPE_PRICE_STARTER
+  },
+  pro: { 
+    name: "Pro", 
+    price: 57, 
+    features: ["Agendamento Online", "Link Personalizado", "Lembretes", "1 Barbeiro"],
+    priceId: import.meta.env.VITE_STRIPE_PRICE_PRO
+  },
+  master: { 
+    name: "Master", 
+    price: 97, 
+    features: ["Até 5 Barbeiros", "Gestão de Equipe", "Relatórios Avançados"],
+    priceId: import.meta.env.VITE_STRIPE_PRICE_MASTER
+  },
 };
 
 const Signup = () => {
@@ -36,8 +51,10 @@ const Signup = () => {
     setLoading(true);
 
     try {
-      // 1️⃣ Criar usuário no Auth com metadata incluindo o plano escolhido
-      const { data, error } = await supabase.auth.signUp({
+      console.log('1. Criando usuário...');
+      
+      // 1️⃣ Criar usuário no Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
         options: {
@@ -46,61 +63,72 @@ const Signup = () => {
             full_name: formData.barberName,
             whatsapp: formData.whatsapp,
             barbershop_name: formData.barbershopName,
-            selected_plan: selectedPlan, // 👈 Salvar plano escolhido
+            selected_plan: selectedPlan,
           }
         },
       });
 
-      if (error) throw error;
-      if (!data.user) throw new Error("Usuário não foi criado.");
+      if (authError) throw authError;
+      if (!authData.user) throw new Error("Usuário não foi criado.");
 
-      // 2️⃣ TODO: Redirecionar para checkout do Stripe
-      // Aqui você vai implementar a integração com Stripe
-      console.log("Plano selecionado:", selectedPlan);
-      console.log("Preço:", PLANS[selectedPlan].price);
+      console.log('2. Usuário criado:', authData.user.id);
 
-      toast({
-        title: "Conta criada com sucesso!",
-        description: `Plano ${PLANS[selectedPlan].name} selecionado. Verifique seu e-mail para confirmar.`,
-      });
+      // 2️⃣ Preparar dados do checkout
+      const plan = PLANS[selectedPlan];
+      
+      const checkoutPayload = {
+        priceId: plan.priceId,
+        userId: authData.user.id,
+        email: formData.email,
+      };
+      
+      console.log('3. Payload do checkout:', checkoutPayload);
+      
+      // Validar antes de enviar
+      if (!checkoutPayload.priceId) {
+        throw new Error(`Price ID não configurado para o plano ${selectedPlan}`);
+      }
 
-      navigate("/login");
+      // 3️⃣ Criar sessão de checkout no Stripe
+      console.log('4. Invocando create-checkout...');
+      
+      const { data: checkoutData, error: checkoutError } = await supabase.functions.invoke(
+        'create-checkout',
+        {
+          body: checkoutPayload,
+        }
+      );
+
+      console.log('5. Resposta bruta:', { data: checkoutData, error: checkoutError });
+
+      if (checkoutError) {
+        console.error("6. Erro no checkout:", checkoutError);
+        throw new Error(`Erro ao criar checkout: ${checkoutError.message || JSON.stringify(checkoutError)}`);
+      }
+
+      if (!checkoutData) {
+        throw new Error("Nenhum dado retornado do checkout");
+      }
+
+      if (!checkoutData.url) {
+        console.error("7. Resposta sem URL:", checkoutData);
+        throw new Error(`URL de checkout não foi gerada. Resposta: ${JSON.stringify(checkoutData)}`);
+      }
+
+      console.log('8. Redirecionando para:', checkoutData.url);
+      
+      // 4️⃣ Redirecionar para Stripe Checkout
+      window.location.href = checkoutData.url;
+
     } catch (error: any) {
-      console.error("Signup error:", error);
+      console.error("❌ Erro completo:", error);
       toast({
         title: "Erro ao criar conta",
         description: error.message || "Tente novamente mais tarde",
         variant: "destructive",
       });
-    } finally {
       setLoading(false);
     }
-    // Adicionar ao handleSignup após criar usuário:
-
-// Mapear planos para Stripe Price IDs
-const STRIPE_PRICES = {
-  starter: import.meta.env.VITE_STRIPE_PRICE_STARTER,
-  pro: import.meta.env.VITE_STRIPE_PRICE_PRO,
-  master: import.meta.env.VITE_STRIPE_PRICE_MASTER,
-};
-
-// Chamar função Edge para criar checkout
-const { data: checkoutData, error: checkoutError } = await supabase.functions.invoke(
-  'create-checkout',
-  {
-    body: {
-      priceId: STRIPE_PRICES[selectedPlan],
-      email: formData.email,
-    },
-  }
-);
-
-if (checkoutError) throw checkoutError;
-
-// Redirecionar para Stripe Checkout
-if (checkoutData?.url) {
-  window.location.href = checkoutData.url;
-}
   };
 
   const updateFormData = (field: string, value: string) => {
@@ -229,10 +257,10 @@ if (checkoutData?.url) {
 
             <Button 
               type="submit" 
-              className="w-full shadow-gold" 
               disabled={loading}
+              className="w-full shadow-gold" 
             >
-              {loading ? "Criando conta..." : `Começar com ${PLANS[selectedPlan].name} - 7 dias grátis`}
+              {loading ? "Processando..." : `Começar com ${PLANS[selectedPlan].name} - 7 dias grátis`}
             </Button>
 
             <p className="text-xs text-center text-muted-foreground">

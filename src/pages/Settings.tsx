@@ -9,6 +9,9 @@ import { ArrowLeft, Settings as SettingsIcon, User, Image as ImageIcon, Link as 
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useSubscription } from "@/hooks/useSubscription";
+import { Badge } from "@/components/ui/badge";
+import { CreditCard } from "lucide-react";
 
 const Settings = () => {
   const navigate = useNavigate();
@@ -28,6 +31,7 @@ const Settings = () => {
     antiFaltasEnabled: true,
     remindersEnabled: true,
   });
+  const { subscription, hasAccess } = useSubscription();
 
   useEffect(() => {
     checkUser();
@@ -220,6 +224,83 @@ const Settings = () => {
           </div>
         </div>
       </header>
+
+      <div className="border-b border-border pb-6 mb-6">
+  <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+    <CreditCard className="h-6 w-6 text-primary" />
+    Sua Assinatura
+  </h2>
+  
+  {subscription && (
+    <Card className="p-6 border-border bg-card">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="font-bold text-lg capitalize">{subscription.plan}</h3>
+          <p className="text-sm text-muted-foreground">
+            Status: <Badge className={
+              subscription.status === 'active' ? 'bg-green-500' :
+              subscription.status === 'trialing' ? 'bg-blue-500' :
+              subscription.status === 'past_due' ? 'bg-yellow-500' :
+              'bg-red-500'
+            }>
+              {subscription.status === 'active' ? 'Ativo' :
+               subscription.status === 'trialing' ? 'Período de Teste' :
+               subscription.status === 'past_due' ? 'Pagamento Atrasado' :
+               'Cancelado'}
+            </Badge>
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-2xl font-bold text-primary">
+            R$ {subscription.plan === 'starter' ? '27' : 
+                subscription.plan === 'pro' ? '57' : '97'}
+          </p>
+          <p className="text-xs text-muted-foreground">/mês</p>
+        </div>
+      </div>
+
+      <div className="space-y-2 text-sm">
+        <p>
+          <strong>Renovação:</strong>{' '}
+          {new Date(subscription.current_period_end).toLocaleDateString('pt-BR')}
+        </p>
+        {subscription.cancel_at_period_end && (
+          <Alert variant="destructive">
+            <AlertDescription>
+              ⚠️ Sua assinatura será cancelada no fim do período atual
+            </AlertDescription>
+          </Alert>
+        )}
+      </div>
+
+      <div className="mt-4 flex gap-2">
+        <Button
+          variant="outline"
+          onClick={() => {
+            // Criar portal session do Stripe
+            window.open('https://billing.stripe.com/p/login/test_...', '_blank');
+          }}
+        >
+          Gerenciar Assinatura
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => navigate("/signup")}
+        >
+          Mudar de Plano
+        </Button>
+      </div>
+    </Card>
+  )}
+  
+  {!hasAccess && (
+    <Alert variant="destructive">
+      <AlertDescription>
+        Sua assinatura expirou. Renove para continuar usando o AutoBarber.
+      </AlertDescription>
+    </Alert>
+  )}
+</div>
 
       <main className="container mx-auto px-4 py-8 max-w-2xl">
         <Card className="p-8 border-border bg-card space-y-8">
