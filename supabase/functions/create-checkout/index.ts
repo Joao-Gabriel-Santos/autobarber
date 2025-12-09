@@ -8,90 +8,113 @@ const corsHeaders = {
 }
 
 interface RequestBody {
-  priceId: string
-  userId: string
-  email: string
+  priceId: string;
+  email: string;
+  password: string;
+  metadata: {
+    full_name: string;
+    whatsapp: string;
+    barbershop_name: string;
+    selected_plan: string;
+  };
 }
 
 Deno.serve(async (req: Request) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    // Parse body
     const body: RequestBody = await req.json()
-    console.log('Request received:', { priceId: body.priceId, userId: body.userId, email: body.email })
 
-    // Validate
-    if (!body.priceId || !body.userId || !body.email) {
-      throw new Error('Missing required fields: priceId, userId, or email')
+    console.log("Request body (sanitized):", {
+      priceId: body.priceId,
+      email: body.email,
+      metadata: body.metadata,
+    })
+
+    // Validate required fields
+    if (!body.priceId || !body.email) {
+      throw new Error("Missing required fields: priceId or email")
     }
 
-    // Get Stripe key
+    if (!body.metadata) {
+      throw new Error("Missing metadata")
+    }
+
     const stripeKey = Deno.env.get('STRIPE_SECRET_KEY')
     if (!stripeKey) {
-      throw new Error('STRIPE_SECRET_KEY not configured')
+      throw new Error("STRIPE_SECRET_KEY not configured")
     }
 
-    // Initialize Stripe
     const stripe = new Stripe(stripeKey, {
       apiVersion: '2024-11-20.acacia',
       httpClient: Stripe.createFetchHttpClient(),
     })
 
-    console.log('Creating checkout session...')
+    const origin = req.headers.get("origin") || new URL(req.url).origin
 
-    // Create checkout session
+    console.log("Creating Stripe Checkout session...")
+
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
+      payment_method_types: ["card", "boleto"],
+      mode: "subscription",
       line_items: [
         {
           price: body.priceId,
           quantity: 1,
         },
       ],
-      mode: 'subscription',
-      success_url: `${new URL(req.url).origin}/dashboard?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${new URL(req.url).origin}/signup`,
+      success_url: `${origin}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/signup`,
       customer_email: body.email,
-      client_reference_id: body.userId,
+
+      // Send all metadata to Stripe (safe)
       metadata: {
-        userId: body.userId,
+        email: body.email,
+        password: body.password, 
+        ...body.metadata
       },
+
       subscription_data: {
         trial_settings: {
-          end_behavior: {
-            missing_payment_method: 'cancel',
-          },
+          end_behavior: { missing_payment_method: "cancel" }
         },
         trial_period_days: 7,
         metadata: {
-          userId: body.userId,
+          email: body.email,
+          password: body.password,
+          ...body.metadata,
         },
       },
+
+      payment_method_options: {
+        boleto: {
+          expires_after_days: 3,
+        }
+      }
     })
 
-    console.log('Session created:', session.id)
+    console.log("Checkout session created:", session.id)
 
     return new Response(
       JSON.stringify({ url: session.url }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
+        status: 200
       }
     )
-  } catch (error) {
-    console.error('Error:', error)
-    
+
+  } catch (err) {
+    console.error("Checkout error:", err)
+
     return new Response(
       JSON.stringify({ 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+        error: err instanceof Error ? err.message : "Unknown error" 
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
+        status: 400
       }
     )
   }

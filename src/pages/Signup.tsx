@@ -46,84 +46,81 @@ const Signup = () => {
   });
   const [loading, setLoading] = useState(false);
 
-  const handleSignup = async (e: React.FormEvent) => {
+const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      console.log('1. Criando usuário...');
+      console.log('1. Preparando checkout sem criar usuário...');
       
-      // 1️⃣ Criar usuário no Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/login`,
-          data: {
-            full_name: formData.barberName,
-            whatsapp: formData.whatsapp,
-            barbershop_name: formData.barbershopName,
-            selected_plan: selectedPlan,
-          }
-        },
-      });
+      // Validar dados antes de enviar
+      if (!formData.email || !formData.password || !formData.barbershopName || !formData.barberName) {
+        throw new Error("Preencha todos os campos obrigatórios");
+      }
 
-      if (authError) throw authError;
-      if (!authData.user) throw new Error("Usuário não foi criado.");
-
-      console.log('2. Usuário criado:', authData.user.id);
-
-      // 2️⃣ Preparar dados do checkout
       const plan = PLANS[selectedPlan];
       
-      const checkoutPayload = {
-        priceId: plan.priceId,
-        userId: authData.user.id,
-        email: formData.email,
-      };
-      
-      console.log('3. Payload do checkout:', checkoutPayload);
-      
-      // Validar antes de enviar
-      if (!checkoutPayload.priceId) {
+      if (!plan.priceId) {
         throw new Error(`Price ID não configurado para o plano ${selectedPlan}`);
       }
 
-      // 3️⃣ Criar sessão de checkout no Stripe
-      console.log('4. Invocando create-checkout...');
+      // Criar payload com TODOS os dados do usuário no metadata
+      const checkoutPayload = {
+        priceId: plan.priceId,
+        email: formData.email,
+        password: formData.password, // ⚠️ Será enviado de forma segura via HTTPS
+        metadata: {
+          full_name: formData.barberName,
+          whatsapp: formData.whatsapp,
+          barbershop_name: formData.barbershopName,
+          selected_plan: selectedPlan,
+        }
+      };
       
-      const { data: checkoutData, error: checkoutError } = await supabase.functions.invoke(
-        'create-checkout',
+      console.log('2. Payload do checkout (sem senha nos logs):', {
+        ...checkoutPayload,
+        password: '[HIDDEN]'
+      });
+
+      // Criar sessão de checkout no Stripe (SEM autenticação)
+      console.log('3. Invocando create-checkout...');
+      
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-checkout`,
         {
-          body: checkoutPayload,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify(checkoutPayload),
         }
       );
 
-      console.log('5. Resposta bruta:', { data: checkoutData, error: checkoutError });
+      console.log('4. Status da resposta:', response.status);
 
-      if (checkoutError) {
-        console.error("6. Erro no checkout:", checkoutError);
-        throw new Error(`Erro ao criar checkout: ${checkoutError.message || JSON.stringify(checkoutError)}`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Erro ao criar checkout');
       }
 
-      if (!checkoutData) {
-        throw new Error("Nenhum dado retornado do checkout");
-      }
+      const checkoutData = await response.json();
+      console.log('5. Resposta:', checkoutData);
 
-      if (!checkoutData.url) {
-        console.error("7. Resposta sem URL:", checkoutData);
+      if (!checkoutData?.url) {
+        console.error("Resposta sem URL:", checkoutData);
         throw new Error(`URL de checkout não foi gerada. Resposta: ${JSON.stringify(checkoutData)}`);
       }
 
-      console.log('8. Redirecionando para:', checkoutData.url);
+      console.log('5. Redirecionando para Stripe...');
       
-      // 4️⃣ Redirecionar para Stripe Checkout
+      // Redirecionar para Stripe Checkout
       window.location.href = checkoutData.url;
 
     } catch (error: any) {
       console.error("❌ Erro completo:", error);
       toast({
-        title: "Erro ao criar conta",
+        title: "Erro ao processar",
         description: error.message || "Tente novamente mais tarde",
         variant: "destructive",
       });
