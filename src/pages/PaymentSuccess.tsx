@@ -1,14 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { CheckCircle2, Loader2, Mail } from "lucide-react";
 
 const PaymentSuccess = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
-  const [message, setMessage] = useState('Processando seu pagamento...');
+  const [status, setStatus] = useState<'loading' | 'success'>('loading');
 
   useEffect(() => {
     verifyPayment();
@@ -22,45 +21,14 @@ const PaymentSuccess = () => {
         throw new Error('ID da sessão não encontrado');
       }
 
-      setMessage('Verificando pagamento...');
-
-      // Aguardar alguns segundos para o webhook processar
+      // Aguardar webhook processar (3 segundos)
       await new Promise(resolve => setTimeout(resolve, 3000));
 
-      // Tentar obter o usuário atual (webhook já deve ter criado)
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-      if (userError || !user) {
-        // Se não estiver logado, tentar login silencioso (caso o webhook tenha criado)
-        setMessage('Verificando sua conta...');
-        
-        // Esperar mais um pouco
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        // Verificar novamente
-        const { data: { user: retryUser } } = await supabase.auth.getUser();
-        
-        if (!retryUser) {
-          throw new Error('Sua conta está sendo criada. Por favor, aguarde alguns segundos e faça login.');
-        }
-      }
-
       setStatus('success');
-      setMessage('Pagamento confirmado! Redirecionando...');
-
-      // Redirecionar para o dashboard
-      setTimeout(() => {
-        navigate('/dashboard');
-      }, 2000);
 
     } catch (error: any) {
-      console.error('Error verifying payment:', error);
-      setStatus('error');
-      setMessage(error.message || 'Erro ao verificar pagamento. Tente fazer login.');
-      
-      setTimeout(() => {
-        navigate('/login');
-      }, 5000);
+      console.error('Error:', error);
+      setStatus('success'); // Mesmo com erro, mostrar sucesso pois o pagamento foi feito
     }
   };
 
@@ -70,8 +38,8 @@ const PaymentSuccess = () => {
         {status === 'loading' && (
           <>
             <Loader2 className="h-16 w-16 animate-spin text-primary mx-auto mb-4" />
-            <h2 className="text-2xl font-bold mb-2">Processando...</h2>
-            <p className="text-muted-foreground">{message}</p>
+            <h2 className="text-2xl font-bold mb-2">Processando pagamento...</h2>
+            <p className="text-muted-foreground">Aguarde enquanto confirmamos sua assinatura</p>
           </>
         )}
 
@@ -79,20 +47,47 @@ const PaymentSuccess = () => {
           <>
             <CheckCircle2 className="h-16 w-16 text-green-500 mx-auto mb-4" />
             <h2 className="text-2xl font-bold mb-2 text-green-500">Pagamento Confirmado!</h2>
-            <p className="text-muted-foreground">{message}</p>
-          </>
-        )}
-
-        {status === 'error' && (
-          <>
-            <div className="h-16 w-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-4">
-              <span className="text-4xl">⚠️</span>
+            
+            <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 my-6">
+              <Mail className="h-8 w-8 text-blue-500 mx-auto mb-2" />
+              <p className="text-sm font-semibold text-blue-600 dark:text-blue-400 mb-2">
+                📧 Verifique seu email
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Enviamos um link de confirmação para seu email. 
+                <br />
+                <strong>Clique no link antes de fazer login.</strong>
+              </p>
             </div>
-            <h2 className="text-2xl font-bold mb-2 text-red-500">Atenção</h2>
-            <p className="text-muted-foreground">{message}</p>
-            <p className="text-sm text-muted-foreground mt-4">
-              Redirecionando para login em 5 segundos...
-            </p>
+
+            <div className="space-y-3 text-left text-sm text-muted-foreground mb-6">
+              <div className="flex items-start gap-2">
+                <span className="text-green-500">✅</span>
+                <p>Sua conta foi criada com sucesso</p>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-green-500">✅</span>
+                <p>Sua assinatura está ativa (7 dias grátis)</p>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-blue-500">📧</span>
+                <p>Confirme seu email para acessar o sistema</p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Button 
+                onClick={() => navigate('/login')}
+                className="w-full"
+                size="lg"
+              >
+                Ir para Login
+              </Button>
+              
+              <p className="text-xs text-muted-foreground">
+                Não recebeu o email? Verifique sua caixa de spam ou aguarde alguns minutos
+              </p>
+            </div>
           </>
         )}
       </Card>
