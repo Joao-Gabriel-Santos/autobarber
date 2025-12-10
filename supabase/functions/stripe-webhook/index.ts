@@ -91,24 +91,30 @@ serve(async (req) => {
           const { data: authData, error: authError } = await supabase.auth.admin.createUser({
             email: email,
             password: password,
-            email_confirm: false, // ❌ NÃO confirmar automaticamente
+            email_confirm: true, // ❌ NÃO confirmar automaticamente
             user_metadata: {
               full_name: fullName,
               whatsapp: whatsapp,
               barbershop_name: barbershopName,
               selected_plan: selectedPlan,
+            },
+            app_metadata: {
+              provider: 'email'
             }
           })
 
-          if (authError) {
-            console.error('❌ Error creating user:', authError)
-            console.error('Error details:', JSON.stringify(authError))
-            throw new Error('Failed to create user: ' + authError.message)
-          }
-
-          console.log('✅ User created:', authData.user.id)
-          console.log('Email confirmed:', authData.user.email_confirmed_at)
-          console.log('⚠️ User needs to confirm email before first login')
+          // Enviar email de confirmação manualmente
+    if (authData?.user) {
+      console.log('2.1. Enviando email de confirmação...');
+      const { error: emailError } = await supabaseAdmin.auth.admin.generateLink({
+        type: 'signup',
+        email: email,
+      });
+      
+      if (emailError) {
+        console.error('Erro ao enviar email:', emailError);
+      }
+    }
 
           // 3️⃣ ENVIAR EMAIL DE CONFIRMAÇÃO MANUALMENTE (caso não tenha sido enviado)
           try {
@@ -116,7 +122,7 @@ serve(async (req) => {
             
             // Usar a API do Supabase para reenviar email de confirmação
             const { error: emailError } = await supabase.auth.admin.generateLink({
-              type: 'signup',
+              type: 'magiclink',
               email: email,
             })
 
