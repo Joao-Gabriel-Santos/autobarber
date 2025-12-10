@@ -106,7 +106,7 @@ serve(async (req) => {
           // Enviar email de confirmação manualmente
     if (authData?.user) {
       console.log('2.1. Enviando email de confirmação...');
-      const { error: emailError } = await supabaseAdmin.auth.admin.generateLink({
+      const { error: emailError } = await supabase.auth.admin.generateLink({
         type: 'signup',
         email: email,
       });

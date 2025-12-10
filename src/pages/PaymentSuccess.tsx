@@ -51,12 +51,10 @@ const PaymentSuccess = () => {
             <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 my-6">
               <Mail className="h-8 w-8 text-blue-500 mx-auto mb-2" />
               <p className="text-sm font-semibold text-blue-600 dark:text-blue-400 mb-2">
-                📧 Verifique seu email
+                📧 Faça seu Login
               </p>
               <p className="text-xs text-muted-foreground">
-                Enviamos um link de confirmação para seu email. 
-                <br />
-                <strong>Clique no link antes de fazer login.</strong>
+                Seja Bem-Vindo ao seu novo sistema!
               </p>
             </div>
 
@@ -69,10 +67,6 @@ const PaymentSuccess = () => {
                 <span className="text-green-500">✅</span>
                 <p>Sua assinatura está ativa (7 dias grátis)</p>
               </div>
-              <div className="flex items-start gap-2">
-                <span className="text-blue-500">📧</span>
-                <p>Confirme seu email para acessar o sistema</p>
-              </div>
             </div>
 
             <div className="space-y-2">
@@ -83,10 +77,6 @@ const PaymentSuccess = () => {
               >
                 Ir para Login
               </Button>
-              
-              <p className="text-xs text-muted-foreground">
-                Não recebeu o email? Verifique sua caixa de spam ou aguarde alguns minutos
-              </p>
             </div>
           </>
         )}
