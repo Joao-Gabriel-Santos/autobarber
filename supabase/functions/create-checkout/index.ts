@@ -18,6 +18,7 @@ interface RequestBody {
 }
 
 Deno.serve(async (req: Request) => {
+  // ✅ Permitir OPTIONS para CORS
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -25,23 +26,44 @@ Deno.serve(async (req: Request) => {
   try {
     const body: RequestBody = await req.json()
 
-    console.log("Request body (sanitized):", {
+    console.log("📦 Request body recebido (sanitized):", {
       priceId: body.priceId,
       email: body.email,
+      hasPassword: !!body.password,
+      passwordLength: body.password?.length,
       metadata: body.metadata,
     })
 
-    // Validate required fields
+    // Validar campos obrigatórios
     if (!body.priceId || !body.email) {
+      console.error("❌ Campos obrigatórios ausentes");
       throw new Error("Missing required fields: priceId or email")
     }
 
+    if (!body.password) {
+      console.error("❌ Senha ausente");
+      throw new Error("Password is required")
+    }
+
     if (!body.metadata) {
+      console.error("❌ Metadata ausente");
       throw new Error("Missing metadata")
     }
 
+    // Validar todos os campos do metadata
+    const requiredMetadata = ['full_name', 'whatsapp', 'barbershop_name', 'selected_plan'];
+    for (const field of requiredMetadata) {
+      if (!body.metadata[field as keyof typeof body.metadata]) {
+        console.error(`❌ Campo ${field} ausente no metadata`);
+        throw new Error(`Missing metadata field: ${field}`);
+      }
+    }
+
+    console.log("✅ Validação completa");
+
     const stripeKey = Deno.env.get('STRIPE_SECRET_KEY')
     if (!stripeKey) {
+      console.error("❌ STRIPE_SECRET_KEY não configurada");
       throw new Error("STRIPE_SECRET_KEY not configured")
     }
 
@@ -52,7 +74,14 @@ Deno.serve(async (req: Request) => {
 
     const origin = req.headers.get("origin") || new URL(req.url).origin
 
-    console.log("Creating Stripe Checkout session...")
+    console.log("🔧 Criando sessão Stripe com metadata:", {
+      email: body.email,
+      metadata: {
+        ...body.metadata,
+        email: body.email,
+        password: '[HIDDEN]'
+      }
+    });
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card", "boleto"],
@@ -67,11 +96,14 @@ Deno.serve(async (req: Request) => {
       cancel_url: `${origin}/signup`,
       customer_email: body.email,
 
-      // Send all metadata to Stripe (safe)
+      // CRÍTICO: Incluir senha no metadata
       metadata: {
         email: body.email,
-        password: body.password, 
-        ...body.metadata
+        password: body.password,
+        full_name: body.metadata.full_name,
+        whatsapp: body.metadata.whatsapp,
+        barbershop_name: body.metadata.barbershop_name,
+        selected_plan: body.metadata.selected_plan,
       },
 
       subscription_data: {
@@ -82,7 +114,10 @@ Deno.serve(async (req: Request) => {
         metadata: {
           email: body.email,
           password: body.password,
-          ...body.metadata,
+          full_name: body.metadata.full_name,
+          whatsapp: body.metadata.whatsapp,
+          barbershop_name: body.metadata.barbershop_name,
+          selected_plan: body.metadata.selected_plan,
         },
       },
 
@@ -93,7 +128,8 @@ Deno.serve(async (req: Request) => {
       }
     })
 
-    console.log("Checkout session created:", session.id)
+    console.log("✅ Sessão criada:", session.id)
+    console.log("🔗 URL:", session.url)
 
     return new Response(
       JSON.stringify({ url: session.url }),
@@ -104,11 +140,16 @@ Deno.serve(async (req: Request) => {
     )
 
   } catch (err) {
-    console.error("Checkout error:", err)
+    console.error("❌ Erro ao criar checkout:", {
+      message: err instanceof Error ? err.message : "Unknown error",
+      stack: err instanceof Error ? err.stack : undefined,
+      details: err
+    })
 
     return new Response(
       JSON.stringify({ 
-        error: err instanceof Error ? err.message : "Unknown error" 
+        error: err instanceof Error ? err.message : "Unknown error",
+        details: err instanceof Error ? err.toString() : "No details"
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
