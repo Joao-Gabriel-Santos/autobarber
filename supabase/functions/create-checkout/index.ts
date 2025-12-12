@@ -1,93 +1,121 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import Stripe from 'https://esm.sh/stripe@14.21.0';
+// supabase/functions/create-checkout/index.ts
+
+import Stripe from 'https://esm.sh/stripe@14.11.0?target=deno'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+}
 
-serve(async (req) => {
+interface RequestBody {
+  priceId: string;
+  email: string;
+  password: string;
+  metadata: {
+    full_name: string;
+    whatsapp: string;
+    barbershop_name: string;
+    selected_plan: string;
+  };
+}
+
+Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
-      apiVersion: '2023-10-16',
-    });
+    const body: RequestBody = await req.json()
 
-    const { priceId, email, password, metadata } = await req.json();
+    console.log("Request body (sanitized):", {
+      priceId: body.priceId,
+      email: body.email,
+      metadata: body.metadata,
+    })
 
-    if (!priceId || !email || !password) {
-      throw new Error('Dados incompletos');
+    // Validate required fields
+    if (!body.priceId || !body.email) {
+      throw new Error("Missing required fields: priceId or email")
     }
 
-    console.log('Criando checkout session para:', email);
+    if (!body.metadata) {
+      throw new Error("Missing metadata")
+    }
 
-    // ✅ Criar sessão de checkout do Stripe
+    const stripeKey = Deno.env.get('STRIPE_SECRET_KEY')
+    if (!stripeKey) {
+      throw new Error("STRIPE_SECRET_KEY not configured")
+    }
+
+    const stripe = new Stripe(stripeKey, {
+      apiVersion: '2024-11-20.acacia',
+      httpClient: Stripe.createFetchHttpClient(),
+    })
+
+    const origin = req.headers.get("origin") || new URL(req.url).origin
+
+    console.log("Creating Stripe Checkout session...")
+
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card', 'boleto'], // ⚠️ Aceita cartão E boleto
+      payment_method_types: ["card", "boleto"],
+      mode: "subscription",
       line_items: [
         {
-          price: priceId,
+          price: body.priceId,
           quantity: 1,
         },
       ],
-      mode: 'subscription',
-      
-      // ✅ URLs de redirecionamento
-      success_url: `${req.headers.get('origin')}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${req.headers.get('origin')}/signup?canceled=true`,
-      
-      customer_email: email,
-      
-      // ✅ Armazenar TODOS os dados no metadata
+      success_url: `${origin}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/signup`,
+      customer_email: body.email,
+
+      // Send all metadata to Stripe (safe)
       metadata: {
-        email,
-        password, // ⚠️ Será recuperado no webhook
-        full_name: metadata.full_name,
-        whatsapp: metadata.whatsapp,
-        barbershop_name: metadata.barbershop_name,
-        selected_plan: metadata.selected_plan,
+        email: body.email,
+        password: body.password, 
+        ...body.metadata
       },
-      
-      // ✅ Configurações específicas para boleto
+
+      subscription_data: {
+        trial_settings: {
+          end_behavior: { missing_payment_method: "cancel" }
+        },
+        trial_period_days: 7,
+        metadata: {
+          email: body.email,
+          password: body.password,
+          ...body.metadata,
+        },
+      },
+
       payment_method_options: {
         boleto: {
-          expires_after_days: 3, // Boleto expira em 3 dias
-        },
-      },
-      
-      // ✅ IMPORTANTE: Permitir promoções/trial
-      allow_promotion_codes: true,
-      subscription_data: {
-        trial_period_days: 7, // 7 dias grátis
-        metadata: {
-          email,
-          full_name: metadata.full_name,
-          barbershop_name: metadata.barbershop_name,
-        },
-      },
-    });
+          expires_after_days: 3,
+        }
+      }
+    })
 
-    console.log('Checkout session criada:', session.id);
+    console.log("Checkout session created:", session.id)
 
     return new Response(
       JSON.stringify({ url: session.url }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      },
-    );
+        status: 200
+      }
+    )
 
-  } catch (error: any) {
-    console.error('Erro no create-checkout:', error);
+  } catch (err) {
+    console.error("Checkout error:", err)
+
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: err instanceof Error ? err.message : "Unknown error" 
+      }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
-      },
-    );
+        status: 400
+      }
+    )
   }
-});
+})
