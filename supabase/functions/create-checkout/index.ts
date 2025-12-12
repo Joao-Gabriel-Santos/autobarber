@@ -1,6 +1,4 @@
-// supabase/functions/create-checkout/index.ts
-
-import Stripe from 'https://esm.sh/stripe@14.11.0?target=deno'
+import Stripe from 'https://esm.sh/stripe@15'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
