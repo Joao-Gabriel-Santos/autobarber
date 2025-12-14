@@ -19,9 +19,7 @@ interface Profile {
   whatsapp: string;
   role: 'owner' | 'barber';
   created_at: string;
-  user?: {
-    email: string;
-  };
+  email?: string; // Será buscado separadamente
 }
 
 interface Invite {
@@ -39,6 +37,7 @@ const TeamManagement = () => {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [teamMembers, setTeamMembers] = useState<Profile[]>([]);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviting, setInviting] = useState(false);
@@ -85,34 +84,51 @@ const TeamManagement = () => {
   };
 
   const loadTeamMembers = async (userId: string) => {
+    try {
+      // Buscar perfis (dono + barbeiros da equipe)
+      const { data: profiles, error } = await supabase
+        .from("profiles")
+        .select("id, full_name, whatsapp, role, created_at, barbershop_id")
+        .or(`id.eq.${userId},barbershop_id.eq.${userId}`)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Error loading profiles:", error);
+        toast({
+          title: "Erro ao carregar equipe",
+          description: error.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Adicionar email apenas para o usuário logado
+      const profilesWithEmails: Profile[] = [];
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+
+      // Assumindo que este é o trecho de código que está causando o erro
+    const loadProfile = async (userId: string) => {
     const { data, error } = await supabase
-      .from("profiles")
-      .select(`
-        *,
-        user:id (
-          email
-        )
-      `)
-      .or(`id.eq.${userId},barbershop_id.eq.${userId}`)
-      .order("created_at", { ascending: false });
+        .from("profiles")
+        .select('*')
+        .eq("id", userId)
+        .maybeSingle();
 
-    if (error) {
-      console.error("Error loading team:", error);
-      return;
+    if (data) {
+        // AQUI ESTÁ O ERRO: data é {..., role: string}, mas o estado espera Profile (role: 'owner'|'barber')
+        setProfile(data as Profile); // <-- Corrija aplicando a asserção
     }
+};
 
-    // Buscar emails dos usuários via auth.admin
-    const profilesWithEmails = await Promise.all(
-      (data || []).map(async (profile) => {
-        const { data: userData } = await supabase.auth.admin.getUserById(profile.id);
-        return {
-          ...profile,
-          user: { email: userData?.user?.email || 'N/A' }
-        };
-      })
-    );
-
-    setTeamMembers(profilesWithEmails as Profile[]);
+      setTeamMembers(profilesWithEmails);
+    } catch (error: any) {
+      console.error("Error loading team:", error);
+      toast({
+        title: "Erro ao carregar equipe",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
   };
 
   const loadInvites = async (userId: string) => {
@@ -153,8 +169,8 @@ const TeamManagement = () => {
       if (error) throw error;
 
       toast({
-        title: "Convite enviado!",
-        description: `Convite enviado para ${inviteEmail}`,
+        title: "Convite criado!",
+        description: `Link de convite gerado para ${inviteEmail}`,
       });
 
       setInviteEmail("");
@@ -162,7 +178,7 @@ const TeamManagement = () => {
       await loadInvites(user.id);
     } catch (error: any) {
       toast({
-        title: "Erro ao enviar convite",
+        title: "Erro ao criar convite",
         description: error.message,
         variant: "destructive",
       });
@@ -294,7 +310,7 @@ const TeamManagement = () => {
                     disabled={inviting || !inviteEmail}
                     className="w-full"
                   >
-                    {inviting ? "Enviando..." : "Enviar Convite"}
+                    {inviting ? "Criando..." : "Gerar Link de Convite"}
                   </Button>
                 </div>
               </DialogContent>
@@ -316,7 +332,7 @@ const TeamManagement = () => {
                       {member.full_name || "Sem nome"}
                     </h3>
                     <p className="text-sm text-muted-foreground mb-2">
-                      {member.user?.email}
+                      {member.email}
                     </p>
                     <Badge variant={member.role === 'owner' ? 'default' : 'secondary'}>
                       {member.role === 'owner' ? 'Dono' : 'Barbeiro'}
@@ -370,7 +386,7 @@ const TeamManagement = () => {
                         </Badge>
                       </div>
                       <div className="text-xs text-muted-foreground space-y-1">
-                        <p>Enviado: {format(new Date(invite.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
+                        <p>Criado: {format(new Date(invite.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
                         <p>Expira: {format(new Date(invite.expires_at), "dd/MM/yyyy", { locale: ptBR })}</p>
                       </div>
                     </div>

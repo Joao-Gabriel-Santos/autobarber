@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { FeatureGate } from "@/components/FeatureGate";
 
 interface WorkingHour {
   id: string;
@@ -260,6 +261,7 @@ const Schedule = () => {
   }
 
   return (
+    <FeatureGate feature="schedule">
     <div className="min-h-screen bg-gradient-dark">
       <header className="border-b border-border bg-card/50 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-4">
@@ -405,6 +407,7 @@ const Schedule = () => {
         </div>
       </main>
     </div>
+    </FeatureGate>
   );
 };
 
