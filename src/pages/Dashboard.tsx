@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Calendar, Settings, TrendingUp, LogOut, Copy, ExternalLink, DollarSign, Users } from "lucide-react";
+import { Calendar, Settings, TrendingUp, LogOut, Copy, ExternalLink, DollarSign, Users, Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import WalkInAppointment from "@/components/WalkInAppointment";
 import { usePermissions } from "@/hooks/usePermissions";

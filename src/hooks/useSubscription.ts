@@ -1,18 +1,8 @@
 // src/hooks/useSubscription.ts
+import { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "react-router-dom";
-
-interface Subscription {
-  id: string;
-  plan: 'starter' | 'pro' | 'master';
-  status: 'active' | 'trialing' | 'canceled' | 'past_due' | 'incomplete';
-  current_period_end: string;
-  cancel_at_period_end: boolean;
-}
-
-// 🎯 DEFINIÇÃO DE FEATURES POR PLANO
+// Definição dos planos e suas features
 const PLAN_FEATURES = {
   starter: {
     // ✅ O QUE TEM
@@ -53,125 +43,126 @@ const PLAN_FEATURES = {
     team_management: true,      // ✅ Gestão de equipe
     custom_link: true,
   },
-};
+} as const;
 
-export const useSubscription = () => {
-  const navigate = useNavigate();
-  const [subscription, setSubscription] = useState<Subscription | null>(null);
+type PlanType = keyof typeof PLAN_FEATURES;
+type FeatureType = keyof typeof PLAN_FEATURES.starter;
+
+export function useSubscription() {
+  const [currentPlan, setCurrentPlan] = useState<PlanType>('starter');
   const [loading, setLoading] = useState(true);
-  const [hasAccess, setHasAccess] = useState(false);
 
   useEffect(() => {
-    checkSubscription();
+    loadSubscription();
   }, []);
 
-  const checkSubscription = async () => {
+  const loadSubscription = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
-        navigate("/login");
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from("subscriptions")
-        .select("*")
-        .eq("user_id", user.id)
-        .single();
-
-      if (error) {
-        console.error("Subscription check error:", error);
-        setHasAccess(false);
+        console.log('⚠️ Usuário não autenticado, usando starter');
+        setCurrentPlan('starter');
         setLoading(false);
         return;
       }
 
-      const completeSubscription = {
-        ...data,
-        cancel_at_period_end: false, 
-      } as Subscription;
+      // Buscar subscription ativa do usuário
+      const { data: subscription, error } = await supabase
+        .from('subscriptions')
+        .select('plan, status')
+        .eq('user_id', user.id)
+        .in('status', ['active', 'trialing'])
+        .maybeSingle();
 
-      // ✅ Verificar se tem acesso
-      const validStatuses = ['active', 'trialing'];
-      setHasAccess(validStatuses.includes(data.status));
+      if (error) {
+        console.error('❌ Erro ao carregar assinatura:', error);
+        setCurrentPlan('starter');
+        setLoading(false);
+        return;
+      }
 
+      // Se tiver subscription ativa, usa o plano dela
+      if (subscription && subscription.plan) {
+        // Converter o nome do plano para lowercase
+        const planType = subscription.plan.toLowerCase() as PlanType;
+        
+        console.log('🔍 Plano encontrado:', planType);
+        
+        // Valida se o plano existe
+        if (planType in PLAN_FEATURES) {
+          setCurrentPlan(planType);
+        } else {
+          console.warn(`Plano desconhecido: ${planType}, usando 'starter'`);
+          setCurrentPlan('starter');
+        }
+      } else {
+        // Sem subscription = plano starter
+        console.log('⚠️ Nenhuma subscription ativa encontrada, usando starter');
+        setCurrentPlan('starter');
+      }
+
+      setLoading(false);
     } catch (error) {
-      console.error("Error checking subscription:", error);
-      setHasAccess(false);
-    } finally {
+      console.error('❌ Erro ao verificar assinatura:', error);
+      setCurrentPlan('starter');
       setLoading(false);
     }
   };
 
-  // 🔒 VERIFICAR SE TEM ACESSO A UMA FEATURE
-  const hasFeature = (feature: keyof typeof PLAN_FEATURES.starter): boolean => {
-    if (!subscription || !hasAccess) return false;
-    return PLAN_FEATURES[subscription.plan]?.[feature] || false;
+  /**
+   * Verifica se o plano atual tem acesso a uma feature específica
+   */
+  const hasFeature = (feature: FeatureType): boolean => {
+    const features = PLAN_FEATURES[currentPlan];
+    return features[feature] === true;
   };
 
-  // 📊 OBTER NOME LEGÍVEL DO PLANO
+  /**
+   * Retorna o nome do plano atual formatado
+   */
   const getPlanName = (): string => {
-    if (!subscription) return 'Sem plano';
-    
-    const names = {
-      starter: 'Starter',
-      pro: 'Pro',
-      master: 'Master',
+    const names: Record<PlanType, string> = {
+      starter: 'Plano Starter',
+      pro: 'Plano Pro',
+      master: 'Plano Master',
     };
-    
-    return names[subscription.plan] || subscription.plan;
+    return names[currentPlan] || 'Plano Starter';
   };
 
-  // 💰 OBTER PREÇO DO PLANO
-  const getPlanPrice = (): number => {
-    if (!subscription) return 0;
-    
-    const prices = {
-      starter: 27,
-      pro: 57,
-      master: 97,
-    };
-    
-    return prices[subscription.plan] || 0;
+  /**
+   * Retorna todas as features do plano atual
+   */
+  const getFeatures = () => {
+    return PLAN_FEATURES[currentPlan];
   };
 
-  // 📋 LISTAR TODAS AS FEATURES DO PLANO ATUAL
-  const getPlanFeatures = () => {
-    if (!subscription) return [];
-    return PLAN_FEATURES[subscription.plan];
+  /**
+   * Verifica se o usuário precisa fazer upgrade para acessar uma feature
+   */
+  const needsUpgrade = (feature: FeatureType): boolean => {
+    return !hasFeature(feature);
   };
 
-  // 🚀 SUGERIR UPGRADE
-  const suggestUpgrade = (feature: keyof typeof PLAN_FEATURES.starter): string | null => {
-    if (!subscription) return null;
-    
-    // Se já tem a feature, não precisa upgrade
-    if (hasFeature(feature)) return null;
-    
-    // Verificar qual plano tem essa feature
-    if (PLAN_FEATURES.pro[feature] && subscription.plan === 'starter') {
-      return 'Disponível no plano Pro';
-    }
-    
-    if (PLAN_FEATURES.master[feature]) {
-      return subscription.plan === 'starter' 
-        ? 'Disponível nos planos Pro e Master'
-        : 'Disponível no plano Master';
-    }
-    
+  /**
+   * Retorna o plano mínimo necessário para uma feature
+   */
+  const getRequiredPlan = (feature: FeatureType): PlanType | null => {
+    // Verifica em ordem: starter -> pro -> master
+    if (PLAN_FEATURES.starter[feature]) return 'starter';
+    if (PLAN_FEATURES.pro[feature]) return 'pro';
+    if (PLAN_FEATURES.master[feature]) return 'master';
     return null;
   };
 
   return {
-    subscription,
+    currentPlan,
     loading,
-    hasAccess,
     hasFeature,
     getPlanName,
-    getPlanPrice,
-    getPlanFeatures,
-    suggestUpgrade,
-    refetch: checkSubscription,
+    getFeatures,
+    needsUpgrade,
+    getRequiredPlan,
+    refresh: loadSubscription,
   };
-};
+}
