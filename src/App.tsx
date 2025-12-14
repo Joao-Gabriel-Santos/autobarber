@@ -19,6 +19,8 @@ import UpdatePassword from "./pages/UpdatePassword";
 import ForgotPassword from "./pages/ForgotPassword";
 import Finance from "./pages/dashboard/Finance";
 import PaymentSuccess from "./pages/PaymentSuccess";
+import TeamManagement from "./pages/dashboard/TeamManagement";
+import AcceptInvite from "./pages/dashboard/AcceptInvite";
 
 
 const queryClient = new QueryClient();
@@ -43,6 +45,8 @@ const App = () => (
           <Route path="/book/:barberSlug" element={<BookAppointment />} />
           <Route path="/meus-agendamentos" element={<ClientAppointments />} />
           <Route path="/update-password" element={<UpdatePassword />} />
+          <Route path="/accept-invite/:token" element={<AcceptInvite />}/>
+          <Route path="/dashboard/team" element={<TeamManagement />}/>
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/confirm-email" element={<ConfirmEmail />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

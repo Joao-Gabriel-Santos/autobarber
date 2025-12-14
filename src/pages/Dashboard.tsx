@@ -4,13 +4,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Calendar, Settings, TrendingUp, LogOut, Copy, ExternalLink, DollarSign } from "lucide-react";
+import { Calendar, Settings, TrendingUp, LogOut, Copy, ExternalLink, DollarSign, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import WalkInAppointment from "@/components/WalkInAppointment";
+import { usePermissions } from "@/hooks/usePermissions";
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { permissions, loading: permissionsLoading } = usePermissions();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [barbershopSlug, setBarbershopSlug] = useState<string>("");
@@ -20,7 +22,6 @@ const Dashboard = () => {
   const [receitaHoje, setReceitaHoje] = useState(0);
   const [taxaConfirmacao, setTaxaConfirmacao] = useState(0);
 
-  // ✅ DECLARAR A FUNÇÃO ANTES DE USAR
   const loadDashboardStats = async (userId: string) => {
     const today = new Date().toISOString().split("T")[0];
 
@@ -62,7 +63,6 @@ const Dashboard = () => {
         return;
       }
 
-      // ✅ AGORA PODE CHAMAR A FUNÇÃO
       const stats = await loadDashboardStats(user.id);
       if (stats) {
         setTotalHoje(stats.totalHoje);
@@ -170,7 +170,7 @@ const Dashboard = () => {
     window.open(`${window.location.origin}/book/${barbershopSlug}`, '_blank');
   };
 
-  if (loading) {
+  if (loading || permissionsLoading) {
     return (
       <div className="min-h-screen bg-gradient-dark flex items-center justify-center">
         <div className="text-center">
@@ -260,102 +260,127 @@ const Dashboard = () => {
 
         {/* Action Cards */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <div
-            className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
-            onClick={() => navigate("/dashboard/services")}
-          >
-            <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-              <Settings className="h-6 w-6 text-primary" />
+          {permissions?.canManageServices && (
+            <div
+              className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
+              onClick={() => navigate("/dashboard/services")}
+            >
+              <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <Settings className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="font-bold text-xl mb-2">Meus Serviços</h3>
+              <p className="text-muted-foreground text-sm">
+                Gerencie preços, duração e fotos dos cortes
+              </p>
             </div>
-            <h3 className="font-bold text-xl mb-2">Meus Serviços</h3>
-            <p className="text-muted-foreground text-sm">
-              Gerencie preços, duração e fotos dos cortes
-            </p>
-          </div>
+          )}
 
-          <div
-            className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
-            onClick={() => navigate("/dashboard/schedule")}
-          >
-            <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-              <Calendar className="h-6 w-6 text-primary" />
+          {permissions?.canManageOwnSchedule && (
+            <div
+              className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
+              onClick={() => navigate("/dashboard/schedule")}
+            >
+              <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <Calendar className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="font-bold text-xl mb-2">Horários</h3>
+              <p className="text-muted-foreground text-sm">
+                Configure sua disponibilidade semanal
+              </p>
             </div>
-            <h3 className="font-bold text-xl mb-2">Horários</h3>
-            <p className="text-muted-foreground text-sm">
-              Configure sua disponibilidade semanal
-            </p>
-          </div>
+          )}
 
-          <div
-            className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
-            onClick={() => navigate("/dashboard/appointments")}
-          >
-            <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-              <TrendingUp className="h-6 w-6 text-primary" />
+          {permissions?.canViewOwnAppointments && (
+            <div
+              className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
+              onClick={() => navigate("/dashboard/appointments")}
+            >
+              <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <TrendingUp className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="font-bold text-xl mb-2">Agendamentos</h3>
+              <p className="text-muted-foreground text-sm">
+                Visualize e gerencie seus agendamentos
+              </p>
             </div>
-            <h3 className="font-bold text-xl mb-2">Agendamentos</h3>
-            <p className="text-muted-foreground text-sm">
-              Visualize e gerencie seus agendamentos
-            </p>
-          </div>
+          )}
 
-          <div
-            className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
-            onClick={() => navigate("/dashboard/finance")}
-          >
-            <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-              <DollarSign className="h-6 w-6 text-primary" />
+          {permissions?.canViewFinance && (
+            <div
+              className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
+              onClick={() => navigate("/dashboard/finance")}
+            >
+              <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <DollarSign className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="font-bold text-xl mb-2">Financeiro</h3>
+              <p className="text-muted-foreground text-sm">
+                Análise detalhada de receitas e métricas
+              </p>
             </div>
-            <h3 className="font-bold text-xl mb-2">Financeiro</h3>
-            <p className="text-muted-foreground text-sm">
-              Análise detalhada de receitas e métricas
-            </p>
-          </div>
+          )}
+
+          {permissions?.canManageTeam && (
+            <div
+              className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
+              onClick={() => navigate("/dashboard/team")}
+            >
+              <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <Users className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="font-bold text-xl mb-2">Equipe</h3>
+              <p className="text-muted-foreground text-sm">
+                Gerencie barbeiros e convites da equipe
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Public Link */}
-        <div className="mt-8">
-          <Card className="p-6 border-border bg-card">
-            <h3 className="font-bold text-lg mb-2">Link de Agendamento</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Compartilhe este link com seus clientes para que eles possam fazer agendamentos online:
-            </p>
-            {!barbershopSlug ? (
-              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 mb-4">
-                <p className="text-sm text-yellow-600 dark:text-yellow-400">
-                  ⚠️ Configure seu link personalizado nas configurações para compartilhar com seus clientes.
-                </p>
-                <Button
-                  onClick={() => navigate("/settings")}
-                  variant="outline"
-                  className="mt-2"
-                >
-                  Ir para Configurações
-                </Button>
-              </div>
-            ) : (
-              <>
-                <div className="flex gap-2">
-                  <Input
-                    readOnly
-                    value={`${window.location.origin}/book/${barbershopSlug}`}
-                    className="flex-1 bg-background"
-                  />
-                  <Button onClick={copyBookingLink}>
-                    <Copy className="h-4 w-4 mr-2" />
-                    Copiar
-                  </Button>
-                  <Button onClick={openBookingPage} variant="outline">
-                    <ExternalLink className="h-4 w-4" />
+        {permissions?.role === 'owner' && (
+          <div className="mt-8">
+            <Card className="p-6 border-border bg-card">
+              <h3 className="font-bold text-lg mb-2">Link de Agendamento</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Compartilhe este link com seus clientes para que eles possam fazer agendamentos online:
+              </p>
+              {!barbershopSlug ? (
+                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 mb-4">
+                  <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                    ⚠️ Configure seu link personalizado nas configurações para compartilhar com seus clientes.
+                  </p>
+                  <Button
+                    onClick={() => navigate("/settings")}
+                    variant="outline"
+                    className="mt-2"
+                  >
+                    Ir para Configurações
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Seu link personalizado: <span className="text-primary font-medium">{barbershopSlug}</span>
-                </p>
-              </>
-            )}
-          </Card>
-        </div>
+              ) : (
+                <>
+                  <div className="flex gap-2">
+                    <Input
+                      readOnly
+                      value={`${window.location.origin}/book/${barbershopSlug}`}
+                      className="flex-1 bg-background"
+                    />
+                    <Button onClick={copyBookingLink}>
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copiar
+                    </Button>
+                    <Button onClick={openBookingPage} variant="outline">
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Seu link personalizado: <span className="text-primary font-medium">{barbershopSlug}</span>
+                  </p>
+                </>
+              )}
+            </Card>
+          </div>
+        )}
       </main>
     </div>
   );

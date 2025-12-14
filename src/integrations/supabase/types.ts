@@ -13,6 +13,47 @@ export type Database = {
   
   public: {
     Tables: {
+      barber_invites: {
+        Row: {
+          id: string
+          barbershop_id: string
+          email: string
+          status: string
+          invite_token: string
+          expires_at: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          barbershop_id: string
+          email: string
+          status?: string
+          invite_token: string
+          expires_at: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          barbershop_id?: string
+          email?: string
+          status?: string
+          invite_token?: string
+          expires_at?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "barber_invites_barbershop_id_fkey"
+            columns: ["barbershop_id"]
+            isOneToOne: false
+            referencedRelation: "barbershops"
+            referencedColumns: ["barber_id"]
+          },
+        ]
+      }
       breaks: {
         Row: {
           id: string
@@ -117,6 +158,8 @@ export type Database = {
       profiles: {
         Row: {
           id: string
+          role: string
+          barbershop_id: string
           full_name: string | null
           whatsapp: string | null
           created_at: string
@@ -124,6 +167,8 @@ export type Database = {
         }
         Insert: {
           id: string
+          barbershop_id?: string
+          role?: string
           full_name?: string | null
           whatsapp?: string | null
           created_at?: string
@@ -131,6 +176,8 @@ export type Database = {
         }
         Update: {
           id?: string
+          role?: string
+          barbershop_id?: string
           full_name?: string | null
           whatsapp?: string | null
           created_at?: string
@@ -212,6 +259,16 @@ export type Database = {
       get_barbershop_by_slug: {
         Args: { slug_param: string }
         Returns: BarbershopData[]
+      }
+      accept_barber_invite: {
+        Args: {
+          p_invite_token: string,
+          p_user_id: string
+        }
+        Returns: {
+          success: boolean;
+          error?: string;
+        }
       }
     }
     Enums: {
