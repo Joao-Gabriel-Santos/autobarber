@@ -102,25 +102,21 @@ const Financie = () => {
       const lastMonthStart = startOfMonth(subMonths(now, 1));
       const lastMonthEnd = endOfMonth(subMonths(now, 1));
 
-      // Filtrar agendamentos da semana
       const weekAppointments = appointments?.filter(apt => {
         const date = new Date(apt.appointment_date);
         return date >= weekStart && date <= weekEnd;
       }) || [];
 
-      // Filtrar agendamentos do mês
       const monthAppointments = appointments?.filter(apt => {
         const date = new Date(apt.appointment_date);
         return date >= monthStart && date <= monthEnd;
       }) || [];
 
-      // Filtrar agendamentos do mês passado
       const lastMonthAppointments = appointments?.filter(apt => {
         const date = new Date(apt.appointment_date);
         return date >= lastMonthStart && date <= lastMonthEnd;
       }) || [];
 
-      // Calcular receitas
       const weekRev = weekAppointments.reduce((sum, apt) => sum + apt.price, 0);
       const monthRev = monthAppointments.reduce((sum, apt) => sum + apt.price, 0);
       const lastMonthRev = lastMonthAppointments.reduce((sum, apt) => sum + apt.price, 0);
@@ -130,7 +126,6 @@ const Financie = () => {
       setLastMonthRevenue(lastMonthRev);
       setTotalAppointments(appointments?.length || 0);
 
-      // Serviços mais vendidos (todos os tempos)
       const serviceMap = new Map<string, ServiceStats>();
       appointments?.forEach(apt => {
         const serviceName = apt.services?.name || "Sem nome";
@@ -155,7 +150,6 @@ const Financie = () => {
         .slice(0, 5);
       setTopServices(topSvcs);
 
-      // Picos de horário (todos os tempos)
       const hourMap = new Map<string, number>();
       appointments?.forEach(apt => {
         const hour = apt.appointment_time.split(':')[0] + ':00';
@@ -168,7 +162,6 @@ const Financie = () => {
         .slice(0, 10);
       setPeakHours(peakHrs);
 
-      // Dados para gráfico semanal
       const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
       const weekChart = weekDays.map(day => {
         const dayStr = format(day, 'yyyy-MM-dd');
@@ -182,7 +175,6 @@ const Financie = () => {
       });
       setWeeklyData(weekChart);
 
-      // Dados para gráfico mensal (últimos 3 meses)
       const monthsData = [];
       for (let i = 2; i >= 0; i--) {
         const monthDate = subMonths(now, i);
