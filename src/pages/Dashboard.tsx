@@ -183,10 +183,37 @@ const Dashboard = () => {
     );
   }
 
-   return (
+  return (
     <div className="min-h-screen bg-gradient-dark">
+      {/* Header */}
+      <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="h-10 w-10 rounded-lg bg-gradient-gold flex items-center justify-center font-bold text-primary-foreground">
+                AB
+              </div>
+              <span className="text-xl font-bold bg-gradient-gold bg-clip-text text-transparent">
+                AutoBarber
+              </span>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-muted-foreground hidden sm:block">
+                {fullName || user?.email}
+              </span>
+              <Button variant="outline" size="icon" onClick={() => navigate("/settings")}>
+                <Settings className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="icon" onClick={handleLogout}>
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      </header>
       {/* ... (Header e Stats permanecem iguais) */}
 
+      {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         {/* Mostrar plano atual */}
         <div className="mb-8 flex items-center justify-between">
@@ -199,12 +226,6 @@ const Dashboard = () => {
             </p>
           </div>
           
-          {/* Badge do Plano */}
-          <div className="text-right">
-            <div className="text-sm text-muted-foreground mb-1">Seu Plano</div>
-            <div className="text-2xl font-bold text-primary">{getPlanName()}</div>
-          </div>
-          
           {/* Botão de Entrada Direta - DISPONÍVEL EM TODOS OS PLANOS */}
           {user && hasFeature('walk_in') && (
             <WalkInAppointment 
@@ -215,7 +236,31 @@ const Dashboard = () => {
         </div>
 
         {/* Quick Stats */}
-        {/* ... (permanece igual) */}
+        <div className="grid md:grid-cols-3 gap-6 mb-8">
+          <div className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-muted-foreground text-sm">Agendamentos Hoje</span>
+              <Calendar className="h-4 w-4 text-primary" />
+            </div>
+            <p className="text-3xl font-bold">{totalHoje}</p>
+          </div>
+
+          <div className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-muted-foreground text-sm">Receita do Dia</span>
+              <TrendingUp className="h-4 w-4 text-primary" />
+            </div>
+            <p className="text-3xl font-bold">R${receitaHoje.toFixed(2)}</p>
+          </div>
+
+          <div className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-muted-foreground text-sm">Taxa de Confirmação</span>
+              <TrendingUp className="h-4 w-4 text-primary" />
+            </div>
+            <p className="text-3xl font-bold">{taxaConfirmacao}%</p>
+          </div>
+        </div>
 
         {/* Action Cards - COM RESTRIÇÕES POR PLANO */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -365,7 +410,44 @@ const Dashboard = () => {
         {hasFeature('custom_link') && (
           <div className="mt-8">
             <Card className="p-6 border-border bg-card">
-              {/* ... (código do link permanece igual) */}
+              <h3 className="font-bold text-lg mb-2">Link de Agendamento</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Compartilhe este link com seus clientes para que eles possam fazer agendamentos online:
+              </p>
+              {!barbershopSlug ? (
+                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 mb-4">
+                  <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                    ⚠️ Configure seu link personalizado nas configurações para compartilhar com seus clientes.
+                  </p>
+                  <Button
+                    onClick={() => navigate("/settings")}
+                    variant="outline"
+                    className="mt-2"
+                  >
+                    Ir para Configurações
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex gap-2">
+                    <Input
+                      readOnly
+                      value={`${window.location.origin}/book/${barbershopSlug}`}
+                      className="flex-1 bg-background"
+                    />
+                    <Button onClick={copyBookingLink}>
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copiar
+                    </Button>
+                    <Button onClick={openBookingPage} variant="outline">
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Seu link personalizado: <span className="text-primary font-medium">{barbershopSlug}</span>
+                  </p>
+                </>
+              )}
             </Card>
           </div>
         )}
