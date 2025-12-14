@@ -17,13 +17,86 @@ const Login = () => {
     e.preventDefault();
     setLoading(true);
 
+    console.log("🔐 Tentando fazer login...");
+    console.log("📧 Email:", email);
+    console.log("🔑 Senha length:", password.length);
+
     try {
+      // 🔍 VERIFICAR SE O USUÁRIO EXISTE NO BANCO
+      console.log("🔍 Verificando se usuário existe...");
+      
+      const { data: userData, error: userCheckError } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .eq('id', '(SELECT id FROM auth.users WHERE email = $1)')
+        .single();
+
+      console.log("📊 Resultado da verificação:", { userData, userCheckError });
+
+      // 🔐 TENTAR LOGIN
+      console.log("🔐 Tentando autenticar...");
+      
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+        email: email.trim().toLowerCase(),
+        password: password,
       });
 
-      if (error) throw error;
+      console.log("📊 Resposta do login:", {
+        success: !!data,
+        error: error,
+        session: data?.session ? "✅ Sessão criada" : "❌ Sem sessão",
+        user: data?.user ? {
+          id: data.user.id,
+          email: data.user.email,
+          confirmed: data.user.email_confirmed_at ? "✅" : "❌",
+        } : null
+      });
+
+      if (error) {
+        console.error("❌ Erro detalhado:", {
+          message: error.message,
+          status: error.status,
+          name: error.name,
+          stack: error.stack,
+        });
+
+        // Mensagens específicas baseadas no erro
+        let errorMessage = "Erro ao fazer login";
+        let errorDescription = error.message;
+
+        if (error.message.includes("Invalid login credentials")) {
+          errorMessage = "Credenciais inválidas";
+          errorDescription = "Email ou senha incorretos. Verifique e tente novamente.";
+        } else if (error.message.includes("Email not confirmed")) {
+          errorMessage = "Email não confirmado";
+          errorDescription = "Verifique seu email e confirme sua conta antes de fazer login.";
+        } else if (error.message.includes("User not found")) {
+          errorMessage = "Usuário não encontrado";
+          errorDescription = "Esta conta não existe. Deseja criar uma nova conta?";
+        }
+
+        toast({
+          title: errorMessage,
+          description: errorDescription,
+          variant: "destructive",
+        });
+
+        throw error;
+      }
+
+      if (!data.session) {
+        console.error("❌ Login bem-sucedido mas sem sessão criada");
+        toast({
+          title: "Erro de autenticação",
+          description: "Login bem-sucedido mas a sessão não foi criada. Tente novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      console.log("✅ Login bem-sucedido!");
+      console.log("👤 Usuário:", data.user.email);
+      console.log("🎫 Token:", data.session.access_token.substring(0, 20) + "...");
 
       toast({
         title: "Login realizado!",
@@ -32,11 +105,16 @@ const Login = () => {
 
       navigate("/dashboard");
     } catch (error: any) {
-      toast({
-        title: "Erro ao fazer login",
-        description: error.message || "Verifique suas credenciais e tente novamente",
-        variant: "destructive",
-      });
+      console.error("💥 Erro no bloco catch:", error);
+      
+      // Se já mostrou toast no bloco de erro específico, não mostrar novamente
+      if (!error.message?.includes("Invalid login") && !error.message?.includes("not confirmed")) {
+        toast({
+          title: "Erro ao fazer login",
+          description: error.message || "Tente novamente mais tarde",
+          variant: "destructive",
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -123,6 +201,16 @@ const Login = () => {
             ← Voltar para home
           </Button>
         </div>
+
+        {/* Debug Panel - Remover em produção */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="mt-4 p-4 bg-muted rounded-lg text-xs">
+            <p className="font-bold mb-2">🔧 Debug Info:</p>
+            <p>Email: {email || "(vazio)"}</p>
+            <p>Senha Length: {password.length}</p>
+            <p>Supabase URL: {import.meta.env.VITE_SUPABASE_URL}</p>
+          </div>
+        )}
       </div>
     </div>
   );
