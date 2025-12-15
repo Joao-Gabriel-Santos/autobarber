@@ -201,16 +201,6 @@ const Login = () => {
             ← Voltar para home
           </Button>
         </div>
-
-        {/* Debug Panel - Remover em produção */}
-        {process.env.NODE_ENV === 'development' && (
-          <div className="mt-4 p-4 bg-muted rounded-lg text-xs">
-            <p className="font-bold mb-2">🔧 Debug Info:</p>
-            <p>Email: {email || "(vazio)"}</p>
-            <p>Senha Length: {password.length}</p>
-            <p>Supabase URL: {import.meta.env.VITE_SUPABASE_URL}</p>
-          </div>
-        )}
       </div>
     </div>
   );
