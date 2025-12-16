@@ -48,9 +48,40 @@ const PLAN_FEATURES = {
 type PlanType = keyof typeof PLAN_FEATURES;
 type FeatureType = keyof typeof PLAN_FEATURES.starter;
 
-export function useSubscription() {
+// 🚨 NOVO: Interface para o objeto de assinatura do Supabase
+interface SubscriptionData {
+  plan: string; // Vai ser 'starter', 'pro', 'master'
+  status: 'active' | 'trialing' | 'past_due' | 'canceled' | 'incomplete';
+  current_period_end: string;
+  cancel_at_period_end: boolean;
+}
+
+// 🚨 NOVO: Interface para o retorno completo do hook
+interface UseSubscriptionReturn {
+  currentPlan: PlanType;
+  loading: boolean;
+  hasFeature: (feature: FeatureType) => boolean;
+  getPlanName: () => string;
+  getFeatures: () => Record<FeatureType, boolean>;
+  needsUpgrade: (feature: FeatureType) => boolean;
+  getRequiredPlan: (feature: FeatureType) => PlanType | null;
+  refresh: () => Promise<void>;
+  
+  // 🚨 PROPRIEDADES FALTANTES QUE O COMPONENTE PRECISA
+  subscription: (SubscriptionData & { plan: PlanType }) | null; // Adicionado
+  hasAccess: boolean; // Adicionado
+}
+
+
+export function useSubscription(): UseSubscriptionReturn { // 🚨 Adicionar o tipo de retorno
   const [currentPlan, setCurrentPlan] = useState<PlanType>('starter');
   const [loading, setLoading] = useState(true);
+  
+  // 🚨 NOVO ESTADO: Para armazenar o objeto de assinatura
+  const [subscription, setSubscription] = useState<any>(null); // Usamos 'any' temporariamente ou definimos SubscriptionData completa
+  
+  // 🚨 NOVO ESTADO: Para verificar se tem acesso ativo
+  const [hasAccess, setHasAccess] = useState(false);
 
   useEffect(() => {
     loadSubscription();
@@ -62,57 +93,63 @@ export function useSubscription() {
       
       if (!user) {
         console.log('⚠️ Usuário não autenticado, usando starter');
+        setSubscription(null);
+        setHasAccess(false);
         setCurrentPlan('starter');
         setLoading(false);
         return;
       }
 
-      // Buscar subscription ativa do usuário
-      const { data: subscription, error } = await supabase
+      // 🚨 MUDANÇA: Buscar mais campos da subscription para exibir na tela Settings
+      const { data: subData, error } = await supabase
         .from('subscriptions')
-        .select('plan, status')
+        .select('plan, status, current_period_end, cancel_at_period_end') // 🚨 Adicionado campos
         .eq('user_id', user.id)
-        .in('status', ['active', 'trialing'])
+        .order('current_period_end', { ascending: false }) // Buscar a mais recente
+        .limit(1)
         .maybeSingle();
 
       if (error) {
-        console.error('❌ Erro ao carregar assinatura:', error);
+        // ... (seu código de tratamento de erro)
+        setSubscription(null);
+        setHasAccess(false);
         setCurrentPlan('starter');
         setLoading(false);
         return;
       }
-
-      // Se tiver subscription ativa, usa o plano dela
-      if (subscription && subscription.plan) {
-        // Converter o nome do plano para lowercase
-        const planType = subscription.plan.toLowerCase() as PlanType;
+      
+      let finalPlan: PlanType = 'starter';
+      let accessStatus = false;
+      
+      if (subData) {
+        const status = subData.status;
         
-        console.log('🔍 Plano encontrado:', planType);
-        
-        // Valida se o plano existe
-        if (planType in PLAN_FEATURES) {
-          setCurrentPlan(planType);
-        } else {
-          console.warn(`Plano desconhecido: ${planType}, usando 'starter'`);
-          setCurrentPlan('starter');
+        // Verifica se o status é considerado ativo (active ou trialing)
+        if (['active', 'trialing'].includes(status)) {
+          accessStatus = true;
         }
-      } else {
-        // Sem subscription = plano starter
-        console.log('⚠️ Nenhuma subscription ativa encontrada, usando starter');
-        setCurrentPlan('starter');
-      }
 
+        const planType = subData.plan.toLowerCase() as PlanType;
+        
+        if (planType in PLAN_FEATURES) {
+          finalPlan = planType;
+        }
+      }
+      
+      // 🚨 ATUALIZAÇÃO DOS NOVOS ESTADOS
+      setSubscription(subData); // Armazena o objeto completo
+      setHasAccess(accessStatus); // Armazena o status booleano
+      setCurrentPlan(finalPlan);
+      
       setLoading(false);
     } catch (error) {
-      console.error('❌ Erro ao verificar assinatura:', error);
+      // ... (seu código de tratamento de erro)
+      setSubscription(null);
+      setHasAccess(false);
       setCurrentPlan('starter');
       setLoading(false);
     }
   };
-
-  /**
-   * Verifica se o plano atual tem acesso a uma feature específica
-   */
   const hasFeature = (feature: FeatureType): boolean => {
     const features = PLAN_FEATURES[currentPlan];
     return features[feature] === true;
@@ -155,7 +192,7 @@ export function useSubscription() {
     return null;
   };
 
-  return {
+ return {
     currentPlan,
     loading,
     hasFeature,
@@ -164,5 +201,7 @@ export function useSubscription() {
     needsUpgrade,
     getRequiredPlan,
     refresh: loadSubscription,
+    subscription, 
+    hasAccess,     
   };
 }
