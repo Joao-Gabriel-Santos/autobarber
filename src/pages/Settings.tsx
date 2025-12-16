@@ -226,13 +226,13 @@ const Settings = () => {
       </header>
 
       <div className="border-b border-border pb-6 mb-6">
-  <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+  <h2 className="container text-2xl font-bold py-6 mb-3 flex items-center gap-2">
     <CreditCard className="h-6 w-6 text-primary" />
     Sua Assinatura
   </h2>
   
   {subscription && (
-    <Card className="p-6 border-border bg-card">
+    <Card className="container mx-auto px-4 py-8 max-w-2xl">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="font-bold text-lg capitalize">{subscription.plan}</h3>
@@ -278,7 +278,7 @@ const Settings = () => {
           variant="outline"
           onClick={() => {
             // Criar portal session do Stripe
-            window.open('https://billing.stripe.com/p/login/test_...', '_blank');
+            window.open('https://billing.stripe.com/p/login/3cI6oG25w02o2J0fN0a3u00', '_blank');
           }}
         >
           Gerenciar Assinatura
