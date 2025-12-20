@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { parsePhoneNumberFromString, CountryCode } from 'libphonenumber-js';
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface Service {
   id: string;
@@ -17,6 +18,12 @@ interface Service {
   price: number;
   duration: number;
   image_url: string | null;
+}
+
+interface Barber {
+  id: string;
+  full_name: string;
+  avatar_url: string | null;
 }
 
 interface WorkingHour {
@@ -38,6 +45,7 @@ interface BarbershopData {
   slug: string;
   avatar_url: string | null;
   banner_url: string | null;
+  owner_accepts_appointments: boolean;
 }
 
 const BookAppointment = () => {
@@ -45,25 +53,28 @@ const BookAppointment = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [services, setServices] = useState<Service[]>([]);
+  const [barbers, setBarbers] = useState<Barber[]>([]);
   const [workingHours, setWorkingHours] = useState<WorkingHour[]>([]);
   const [breaks, setBreaks] = useState<Break[]>([]);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [selectedBarber, setSelectedBarber] = useState<Barber | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>();
   const [selectedTime, setSelectedTime] = useState<string>("");
   const [availableTimes, setAvailableTimes] = useState<string[]>([]);
   const [clientName, setClientName] = useState("");
   const [clientWhatsapp, setClientWhatsapp] = useState("");
   const [barbershopInfo, setBarbershopInfo] = useState<BarbershopData | null>(null);
+  const [ownerId, setOwnerId] = useState<string>("");
 
   useEffect(() => {
     loadBarbershopData();
   }, [barberSlug]);
 
   useEffect(() => {
-    if (selectedDate && selectedService && barbershopInfo) {
+    if (selectedDate && selectedService && selectedBarber) {
       generateAvailableTimes();
     }
-  }, [selectedDate, selectedService, barbershopInfo]);
+  }, [selectedDate, selectedService, selectedBarber]);
 
   function validateAndNormalize(phone: string) {
     const defaultCountry = 'BR' as CountryCode
@@ -123,8 +134,11 @@ const BookAppointment = () => {
         barber_id: directData.barber_id,
         barbershop_name: directData.barbershop_name,
         full_name: profile?.full_name || null,
-        slug: directData.slug
+        slug: directData.slug,
+        owner_accepts_appointments: directData.owner_accepts_appointments || false
       };
+      
+      setOwnerId(barbershopData.barber_id);
       
       const { data: { publicUrl: avatarUrl } } = supabase
         .storage
@@ -143,9 +157,10 @@ const BookAppointment = () => {
         slug: barbershopData.slug,
         avatar_url: avatarUrl,
         banner_url: bannerUrl,
+        owner_accepts_appointments: barbershopData.owner_accepts_appointments
       });
 
-      // Load services
+      // Load services (do owner)
       const { data: servicesData, error: servicesError } = await supabase
         .from("services")
         .select("*")
@@ -155,27 +170,43 @@ const BookAppointment = () => {
       if (servicesError) throw servicesError;
       setServices(servicesData || []);
 
-      // Load working hours
-      const { data: hoursData, error: hoursError } = await supabase
-        .from("working_hours")
-        .select("*")
-        .eq("barber_id", barbershopData.barber_id)
-        .eq("active", true);
-
-      if (hoursError) throw hoursError;
-      setWorkingHours(hoursData || []);
-
-      // Load breaks
-      const { data: breaksData, error: breaksError } = await supabase
-        .from("breaks")
-        .select("*")
-        .eq("barber_id", barbershopData.barber_id);
-
-      if (breaksError) {
-        console.log("Breaks table error:", breaksError);
-      } else {
-        setBreaks(breaksData || []);
+      // Load barbers (team members + owner se aceita agendamentos)
+      const barbersList: Barber[] = [];
+      
+      // Adicionar owner se aceita agendamentos
+      if (barbershopData.owner_accepts_appointments) {
+        const { data: ownerProfile } = await supabase
+          .from("profiles")
+          .select("id, full_name, avatar_url")
+          .eq("id", barbershopData.barber_id)
+          .single();
+        
+        if (ownerProfile) {
+          barbersList.push({
+            id: ownerProfile.id,
+            full_name: ownerProfile.full_name || "Dono",
+            avatar_url: ownerProfile.avatar_url
+          });
+        }
       }
+
+      // Adicionar barbeiros da equipe
+      const { data: teamMembers } = await supabase
+        .from("profiles")
+        .select("id, full_name, avatar_url")
+        .eq("barbershop_id", barbershopData.barber_id)
+        .eq("role", "barber");
+      
+      if (teamMembers) {
+        barbersList.push(...teamMembers.map(member => ({
+          id: member.id,
+          full_name: member.full_name || "Barbeiro",
+          avatar_url: member.avatar_url
+        })));
+      }
+
+      setBarbers(barbersList);
+
     } catch (error: any) {
       toast({
         title: "Erro ao carregar dados",
@@ -186,6 +217,42 @@ const BookAppointment = () => {
       setLoading(false);
     }
   };
+
+  const loadBarberSchedule = async (barberId: string) => {
+    // Load working hours for selected barber
+    const { data: hoursData, error: hoursError } = await supabase
+      .from("working_hours")
+      .select("*")
+      .eq("barber_id", barberId)
+      .eq("active", true);
+
+    if (hoursError) {
+      console.error("Error loading working hours:", hoursError);
+      setWorkingHours([]);
+    } else {
+      setWorkingHours(hoursData || []);
+    }
+
+    // Load breaks for selected barber
+    const { data: breaksData, error: breaksError } = await supabase
+      .from("breaks")
+      .select("*")
+      .eq("barber_id", barberId);
+
+    if (breaksError) {
+      console.log("Breaks table error:", breaksError);
+      setBreaks([]);
+    } else {
+      setBreaks(breaksData || []);
+    }
+  };
+
+  // Atualizar horários quando barbeiro for selecionado
+  useEffect(() => {
+    if (selectedBarber) {
+      loadBarberSchedule(selectedBarber.id);
+    }
+  }, [selectedBarber]);
 
   const isTimeInBreak = (timeInMinutes: number, dayOfWeek: number): boolean => {
     const dayBreaks = breaks.filter(b => b.day_of_week === dayOfWeek);
@@ -204,7 +271,7 @@ const BookAppointment = () => {
   };
 
   const generateAvailableTimes = async () => {
-    if (!selectedDate || !selectedService || !barbershopInfo) return;
+    if (!selectedDate || !selectedService || !selectedBarber) return;
 
     const dayOfWeek = selectedDate.getDay();
     const workingHour = workingHours.find(wh => wh.day_of_week === dayOfWeek);
@@ -214,15 +281,14 @@ const BookAppointment = () => {
       return;
     }
 
-    // Buscar agendamentos existentes para esta data
+    // Buscar agendamentos existentes DESTE BARBEIRO para esta data
     const { data: existingAppointments } = await supabase
       .from("appointments")
       .select("appointment_time, services(duration)")
-      .eq("barber_id", barbershopInfo.user_id)
+      .eq("barber_id", selectedBarber.id) // Filtrar por barbeiro selecionado
       .eq("appointment_date", format(selectedDate, "yyyy-MM-dd"))
       .in("status", ["pending", "confirmed"]);
 
-    // Criar array de minutos ocupados (mais eficiente para verificação)
     const occupiedMinutes = new Set<number>();
     
     existingAppointments?.forEach((apt: any) => {
@@ -230,7 +296,6 @@ const BookAppointment = () => {
       const startTime = hour * 60 + minute;
       const duration = apt.services?.duration || 0;
       
-      // Marcar cada minuto ocupado pelo agendamento
       for (let i = 0; i < duration; i++) {
         occupiedMinutes.add(startTime + i);
       }
@@ -244,26 +309,21 @@ const BookAppointment = () => {
     const endTime = endHour * 60 + endMinute;
     const serviceDuration = selectedService.duration;
 
-    // Usar a duração do serviço como intervalo entre slots
     while (currentTime + serviceDuration <= endTime) {
       const hour = Math.floor(currentTime / 60);
       const minute = currentTime % 60;
       const timeSlot = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
       
-      // Verificar se todo o período necessário está disponível
       let isAvailable = true;
       
-      // Verificar cada minuto do serviço
       for (let i = 0; i < serviceDuration; i++) {
         const checkTime = currentTime + i;
         
-        // Verificar se está ocupado
         if (occupiedMinutes.has(checkTime)) {
           isAvailable = false;
           break;
         }
         
-        // Verificar se está em intervalo
         if (isTimeInBreak(checkTime, dayOfWeek)) {
           isAvailable = false;
           break;
@@ -274,7 +334,6 @@ const BookAppointment = () => {
         times.push(timeSlot);
       }
       
-      // IMPORTANTE: Incrementar pela duração do serviço
       currentTime += serviceDuration;
     }
 
@@ -302,7 +361,7 @@ const BookAppointment = () => {
   };
 
   const handleBooking = async () => {
-    if (!selectedService || !selectedDate || !selectedTime || !clientName || !clientWhatsapp || !barbershopInfo) {
+    if (!selectedService || !selectedDate || !selectedTime || !clientName || !clientWhatsapp || !selectedBarber) {
       toast({
         title: "Preencha todos os campos",
         variant: "destructive",
@@ -325,7 +384,7 @@ const BookAppointment = () => {
       const { error } = await supabase
         .from("appointments")
         .insert([{
-          barber_id: barbershopInfo.user_id,
+          barber_id: selectedBarber.id, // Usar o ID do barbeiro selecionado
           service_id: selectedService.id,
           appointment_date: format(selectedDate, "yyyy-MM-dd"),
           appointment_time: selectedTime,
@@ -344,6 +403,7 @@ const BookAppointment = () => {
 
       // Reset form
       setSelectedService(null);
+      setSelectedBarber(null);
       setSelectedDate(undefined);
       setSelectedTime("");
       setClientName("");
@@ -362,6 +422,9 @@ const BookAppointment = () => {
     today.setHours(0, 0, 0, 0);
 
     const isPast = date < today;
+    
+    if (!selectedBarber) return isPast;
+    
     const dayOfWeek = date.getDay();
     const barberWorksThisDay = workingHours.some(wh => wh.day_of_week === dayOfWeek);
 
@@ -436,40 +499,74 @@ const BookAppointment = () => {
 
       <main className="container mx-auto px-4 py-8 max-w-6xl">
         <div className="grid lg:grid-cols-2 gap-8">
-          {/* Services Selection */}
-          <div>
-            <h2 className="text-2xl font-bold mb-4">Escolha o Serviço</h2>
-            <div className="space-y-4">
-              {services.map((service) => (
-                <Card
-                  key={service.id}
-                  className={`p-4 cursor-pointer transition-all border-2 ${
-                    selectedService?.id === service.id
-                      ? "border-primary bg-primary/5"
-                      : "border-border bg-card hover:border-primary/50"
-                  }`}
-                  onClick={() => setSelectedService(service)}
-                >
-                  <div className="flex gap-4">
-                    {service.image_url && (
-                      <img
-                        src={service.image_url}
-                        alt={service.name}
-                        className="w-20 h-20 object-cover rounded-lg"
-                      />
-                    )}
-                    <div className="flex-1">
-                      <h3 className="font-bold text-lg">{service.name}</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {service.duration} minutos
-                      </p>
-                      <p className="text-lg font-bold text-primary">
-                        R$ {service.price.toFixed(2)}
-                      </p>
+          {/* Services and Barber Selection */}
+          <div className="space-y-6">
+            {/* Barber Selection */}
+            <div>
+              <h2 className="text-2xl font-bold mb-4">Escolha o Barbeiro</h2>
+              <div className="grid md:grid-cols-2 gap-4">
+                {barbers.map((barber) => (
+                  <Card
+                    key={barber.id}
+                    className={`p-4 cursor-pointer transition-all border-2 ${
+                      selectedBarber?.id === barber.id
+                        ? "border-primary bg-primary/5"
+                        : "border-border bg-card hover:border-primary/50"
+                    }`}
+                    onClick={() => setSelectedBarber(barber)}
+                  >
+                    <div className="flex flex-col items-center gap-3">
+                      <Avatar className="h-20 w-20">
+                        {barber.avatar_url ? (
+                          <AvatarImage src={barber.avatar_url} alt={barber.full_name} />
+                        ) : (
+                          <AvatarFallback className="bg-gradient-gold text-primary-foreground text-xl">
+                            {barber.full_name.charAt(0)}
+                          </AvatarFallback>
+                        )}
+                      </Avatar>
+                      <h3 className="font-bold text-center">{barber.full_name}</h3>
                     </div>
-                  </div>
-                </Card>
-              ))}
+                  </Card>
+                ))}
+              </div>
+            </div>
+
+            {/* Service Selection */}
+            <div>
+              <h2 className="text-2xl font-bold mb-4">Escolha o Serviço</h2>
+              <div className="space-y-4">
+                {services.map((service) => (
+                  <Card
+                    key={service.id}
+                    className={`p-4 cursor-pointer transition-all border-2 ${
+                      selectedService?.id === service.id
+                        ? "border-primary bg-primary/5"
+                        : "border-border bg-card hover:border-primary/50"
+                    }`}
+                    onClick={() => setSelectedService(service)}
+                  >
+                    <div className="flex gap-4">
+                      {service.image_url && (
+                        <img
+                          src={service.image_url}
+                          alt={service.name}
+                          className="w-20 h-20 object-cover rounded-lg"
+                        />
+                      )}
+                      <div className="flex-1">
+                        <h3 className="font-bold text-lg">{service.name}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {service.duration} minutos
+                        </p>
+                        <p className="text-lg font-bold text-primary">
+                          R$ {service.price.toFixed(2)}
+                        </p>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -477,6 +574,14 @@ const BookAppointment = () => {
           <div>
             <h2 className="text-2xl font-bold mb-4">Dados do Agendamento</h2>
             <Card className="p-6 border-border bg-card space-y-6">
+              {selectedBarber && (
+                <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
+                  <p className="text-sm font-semibold text-primary">
+                    Barbeiro selecionado: {selectedBarber.full_name}
+                  </p>
+                </div>
+              )}
+
               <div>
                 <Label>Data</Label>
                 <Calendar
@@ -507,6 +612,14 @@ const BookAppointment = () => {
                 </div>
               )}
 
+              {selectedDate && getFilteredTimes().length === 0 && (
+                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
+                  <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                    ⚠️ Não há horários disponíveis nesta data para este barbeiro.
+                  </p>
+                </div>
+              )}
+
               <div>
                 <Label htmlFor="name">Seu Nome</Label>
                 <Input
@@ -531,7 +644,7 @@ const BookAppointment = () => {
                 className="w-full"
                 size="lg"
                 onClick={handleBooking}
-                disabled={!selectedService || !selectedDate || !selectedTime || !clientName || !clientWhatsapp}
+                disabled={!selectedBarber || !selectedService || !selectedDate || !selectedTime || !clientName || !clientWhatsapp}
               >
                 Confirmar Agendamento
               </Button>

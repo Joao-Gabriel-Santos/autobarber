@@ -10,6 +10,7 @@ interface UserPermissions {
   canManageOwnSchedule: boolean;
   canViewOwnAppointments: boolean;
   barbershopId: string | null;
+  ownerId: string | null; // ID do dono da barbearia
 }
 
 export const usePermissions = () => {
@@ -41,16 +42,20 @@ export const usePermissions = () => {
       }
 
       const isOwner = profile.role === 'owner';
+      
+      // Se for barbeiro, pegar o ID do owner (barbershop_id é o ID do owner)
+      const ownerId = isOwner ? user.id : profile.barbershop_id;
 
       setPermissions({
         role: profile.role as 'owner' | 'barber',
-        canManageServices: isOwner,
-        canManageTeam: isOwner,
-        canManageSettings: isOwner,
-        canViewFinance: isOwner,
-        canManageOwnSchedule: true,
-        canViewOwnAppointments: true,
+        canManageServices: isOwner, // Só owner gerencia serviços
+        canManageTeam: isOwner, // Só owner gerencia equipe
+        canManageSettings: isOwner, // Só owner gerencia configurações gerais
+        canViewFinance: isOwner, // Só owner vê financeiro completo
+        canManageOwnSchedule: true, // Todos podem gerenciar seus horários
+        canViewOwnAppointments: true, // Todos veem seus agendamentos
         barbershopId: profile.barbershop_id,
+        ownerId: ownerId,
       });
     } catch (error) {
       console.error("Error loading permissions:", error);

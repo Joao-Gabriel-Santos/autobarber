@@ -5,17 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import { ArrowLeft, Settings as SettingsIcon, User, Image as ImageIcon, Link as LinkIcon, Info } from "lucide-react";
+import { ArrowLeft, Settings as SettingsIcon, User, Image as ImageIcon, LinkIcon, Info, CreditCard } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useSubscription } from "@/hooks/useSubscription";
 import { Badge } from "@/components/ui/badge";
-import { CreditCard } from "lucide-react";
+import { usePermissions } from "@/hooks/usePermissions";
 
 const Settings = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { permissions } = usePermissions();
   const [user, setUser] = useState<any>(null);
   const [barbershopId, setBarbershopId] = useState<string>("");
   const [loading, setLoading] = useState(true);
@@ -30,8 +31,11 @@ const Settings = () => {
     slug: "",
     antiFaltasEnabled: true,
     remindersEnabled: true,
+    ownerAcceptsAppointments: true, // Nova opção
   });
   const { subscription, hasAccess } = useSubscription();
+
+  const isOwner = permissions?.role === 'owner';
 
   useEffect(() => {
     checkUser();
@@ -54,35 +58,42 @@ const Settings = () => {
         .eq("id", user.id)
         .single();
       
+      // Buscar dados da barbearia (se for owner) ou do owner (se for barbeiro)
+      let barbershopData = null;
+      let targetId = user.id;
+      
+      if (profile?.role === 'barber' && profile.barbershop_id) {
+        // Se for barbeiro, buscar dados do owner
+        targetId = profile.barbershop_id;
+      }
+      
       const { data: barbershop, error: barbershopError } = await supabase
         .from("barbershops")
         .select("*")
-        .eq("barber_id", user.id)
+        .eq("barber_id", targetId)
         .single();
       
       if (barbershopError) {
         console.error("Error loading barbershop:", barbershopError);
-        toast({
-          title: "Erro ao carregar dados",
-          description: barbershopError.message,
-          variant: "destructive",
-        });
-        return;
       }
       
       if (barbershop) {
         setBarbershopId(barbershop.barber_id);
         
         const timestamp = new Date().getTime();
+        
+        // Para barbeiros, buscar sua própria foto
+        const photoUserId = profile?.role === 'barber' ? user.id : barbershop.barber_id;
+        
         const { data: { publicUrl: avatarUrl } } = supabase
           .storage
           .from('avatars')
-          .getPublicUrl(`${user.id}/avatar.png`);
+          .getPublicUrl(`${photoUserId}/avatar.png`);
         
         const { data: { publicUrl: bannerUrl } } = supabase
           .storage
           .from('banners')
-          .getPublicUrl(`${user.id}/banner.png`);
+          .getPublicUrl(`${barbershop.barber_id}/banner.png`);
         
         setFormData({
           barbershopName: barbershop.barbershop_name || "",
@@ -93,6 +104,7 @@ const Settings = () => {
           slug: barbershop.slug || "",
           antiFaltasEnabled: true,
           remindersEnabled: true,
+          ownerAcceptsAppointments: barbershop.owner_accepts_appointments ?? true,
         });
       }
     } catch (error) {
@@ -139,6 +151,14 @@ const Settings = () => {
       const fieldName = type === 'avatar' ? 'avatarUrl' : 'bannerUrl';
       setFormData(prev => ({ ...prev, [fieldName]: urlWithCache }));
 
+      // Atualizar avatar_url no perfil
+      if (type === 'avatar') {
+        await supabase
+          .from("profiles")
+          .update({ avatar_url: urlWithCache })
+          .eq("id", user.id);
+      }
+
       toast({
         title: "Imagem atualizada com sucesso!",
         description: "A nova imagem já está visível",
@@ -173,17 +193,20 @@ const Settings = () => {
 
       if (profileError) throw profileError;
 
-      // 2️⃣ Atualizar barbershop (o slug será atualizado automaticamente pelo trigger)
-      const { error: barbershopError } = await supabase
-        .from("barbershops")
-        .update({
-          barbershop_name: formData.barbershopName,
-        })
-        .eq("barber_id", barbershopId);
+      // 2️⃣ Atualizar barbershop (apenas se for owner)
+      if (isOwner) {
+        const { error: barbershopError } = await supabase
+          .from("barbershops")
+          .update({
+            barbershop_name: formData.barbershopName,
+            owner_accepts_appointments: formData.ownerAcceptsAppointments,
+          })
+          .eq("barber_id", barbershopId);
 
-      if (barbershopError) throw barbershopError;
+        if (barbershopError) throw barbershopError;
+      }
 
-      // 3️⃣ Recarregar dados para pegar o novo slug gerado
+      // 3️⃣ Recarregar dados
       await checkUser();
 
       toast({
@@ -225,203 +248,205 @@ const Settings = () => {
         </div>
       </header>
 
-      <div className="border-b border-border pb-6 mb-6">
-  <h2 className="container text-2xl font-bold py-6 mb-3 flex items-center gap-2">
-    <CreditCard className="h-6 w-6 text-primary" />
-    Sua Assinatura
-  </h2>
-  
-  {subscription && (
-    <Card className="container mx-auto px-4 py-8 max-w-2xl">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="font-bold text-lg capitalize">{subscription.plan}</h3>
-          <p className="text-sm text-muted-foreground">
-            Status: <Badge className={
-              subscription.status === 'active' ? 'bg-green-500' :
-              subscription.status === 'trialing' ? 'bg-blue-500' :
-              subscription.status === 'past_due' ? 'bg-yellow-500' :
-              'bg-red-500'
-            }>
-              {subscription.status === 'active' ? 'Ativo' :
-               subscription.status === 'trialing' ? 'Período de Teste' :
-               subscription.status === 'past_due' ? 'Pagamento Atrasado' :
-               'Cancelado'}
-            </Badge>
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="text-2xl font-bold text-primary">
-            R$ {subscription.plan === 'starter' ? '27' : 
-                subscription.plan === 'pro' ? '57' : '97'}
-          </p>
-          <p className="text-xs text-muted-foreground">/mês</p>
-        </div>
-      </div>
+      {/* Mostrar assinatura APENAS para owners */}
+      {isOwner && (
+        <div className="border-b border-border pb-6 mb-6">
+          <h2 className="container text-2xl font-bold py-6 mb-3 flex items-center gap-2">
+            <CreditCard className="h-6 w-6 text-primary" />
+            Sua Assinatura
+          </h2>
+          
+          {subscription && (
+            <Card className="container mx-auto px-4 py-8 max-w-2xl">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-bold text-lg capitalize">{subscription.plan}</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Status: <Badge className={
+                      subscription.status === 'active' ? 'bg-green-500' :
+                      subscription.status === 'trialing' ? 'bg-blue-500' :
+                      subscription.status === 'past_due' ? 'bg-yellow-500' :
+                      'bg-red-500'
+                    }>
+                      {subscription.status === 'active' ? 'Ativo' :
+                       subscription.status === 'trialing' ? 'Período de Teste' :
+                       subscription.status === 'past_due' ? 'Pagamento Atrasado' :
+                       'Cancelado'}
+                    </Badge>
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-bold text-primary">
+                    R$ {subscription.plan === 'starter' ? '27' : 
+                        subscription.plan === 'pro' ? '57' : '97'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">/mês</p>
+                </div>
+              </div>
 
-      <div className="space-y-2 text-sm">
-        <p>
-          <strong>Renovação:</strong>{' '}
-          {new Date(subscription.current_period_end).toLocaleDateString('pt-BR')}
-        </p>
-        {subscription.cancel_at_period_end && (
-          <Alert variant="destructive">
-            <AlertDescription>
-              ⚠️ Sua assinatura será cancelada no fim do período atual
-            </AlertDescription>
-          </Alert>
-        )}
-      </div>
+              <div className="space-y-2 text-sm">
+                <p>
+                  <strong>Renovação:</strong>{' '}
+                  {new Date(subscription.current_period_end).toLocaleDateString('pt-BR')}
+                </p>
+                {subscription.cancel_at_period_end && (
+                  <Alert variant="destructive">
+                    <AlertDescription>
+                      ⚠️ Sua assinatura será cancelada no fim do período atual
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
 
-      <div className="mt-4 flex gap-2">
-        <Button
-          variant="outline"
-          onClick={() => {
-            // Criar portal session do Stripe
-            window.open('https://billing.stripe.com/p/login/3cI6oG25w02o2J0fN0a3u00', '_blank');
-          }}
-        >
-          Gerenciar Assinatura
-        </Button>
-        <Button
-          variant="outline"
-          onClick={() => navigate("/signup")}
-        >
-          Mudar de Plano
-        </Button>
-      </div>
-    </Card>
-  )}
-  
-  {!hasAccess && (
-    <Alert variant="destructive">
-      <AlertDescription>
-        Sua assinatura expirou. Renove para continuar usando o AutoBarber.
-      </AlertDescription>
-    </Alert>
-  )}
-</div>
+              <div className="mt-4 flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    window.open('https://billing.stripe.com/p/login/3cI6oG25w02o2J0fN0a3u00', '_blank');
+                  }}
+                >
+                  Gerenciar Assinatura
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => navigate("/signup")}
+                >
+                  Mudar de Plano
+                </Button>
+              </div>
+            </Card>
+          )}
+          
+          {!hasAccess && (
+            <Alert variant="destructive">
+              <AlertDescription>
+                Sua assinatura expirou. Renove para continuar usando o AutoBarber.
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
+      )}
 
       <main className="container mx-auto px-4 py-8 max-w-2xl">
         <Card className="p-8 border-border bg-card space-y-8">
-          {/* Link Personalizado */}
-          <div>
-            <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-              <LinkIcon className="h-6 w-6 text-primary" />
-              Link Personalizado
-            </h2>
-            <Alert className="mb-4">
-              <Info className="h-4 w-4" />
-              <AlertDescription>
-                O link é gerado automaticamente a partir do nome da sua barbearia. 
-                Para alterá-lo, mude o nome da barbearia abaixo e salve.
-              </AlertDescription>
-            </Alert>
-            <div className="space-y-2">
-              <Label>Seu Link Único (Gerado Automaticamente)</Label>
-              <div className="flex items-center gap-2 bg-background border border-border rounded-md px-3 py-2">
-                <span className="text-sm text-muted-foreground">
-                  {window.location.origin}/book/
-                </span>
-                <span className="text-sm font-medium text-primary">
-                  {formData.slug || "seu-link-aqui"}
-                </span>
-              </div>
-              {formData.slug && (
-                <p className="text-xs text-muted-foreground">
-                  ✨ Este link é atualizado automaticamente quando você muda o nome da barbearia
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="border-t border-border pt-6">
-            <h2 className="text-2xl font-bold mb-6">Fotos da Barbearia</h2>
-            
-            <div className="grid md:grid-cols-2 gap-6">
-              {/* Avatar Upload */}
-              <div className="space-y-4">
-                <Label className="flex items-center gap-2">
-                  <User className="h-4 w-4" />
-                  Foto de Perfil
-                </Label>
-                <div className="flex flex-col items-center gap-4">
-                  {formData.avatarUrl ? (
-                    <img
-                      src={formData.avatarUrl}
-                      alt="Avatar"
-                      className="w-32 h-32 rounded-full object-cover border-4 border-primary"
-                    />
-                  ) : (
-                    <div className="w-32 h-32 rounded-full bg-muted flex items-center justify-center border-4 border-border">
-                      <User className="h-16 w-16 text-muted-foreground" />
-                    </div>
-                  )}
-                  <div className="flex flex-col gap-2 w-full">
-                    <Input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handleImageUpload(e, 'avatar')}
-                      disabled={uploading === 'avatar'}
-                      className="cursor-pointer"
-                    />
-                    <p className="text-xs text-muted-foreground text-center">
-                      Logo ou foto do barbeiro (Proporção 1:1)
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Banner Upload */}
-              <div className="space-y-4">
-                <Label className="flex items-center gap-2">
-                  <ImageIcon className="h-4 w-4" />
-                  Foto de Capa
-                </Label>
-                <div className="flex flex-col gap-4">
-                  {formData.bannerUrl ? (
-                    <img
-                      src={formData.bannerUrl}
-                      alt="Banner"
-                      className="w-full h-32 object-cover rounded-lg border-2 border-primary"
-                    />
-                  ) : (
-                    <div className="w-full h-32 bg-muted flex items-center justify-center rounded-lg border-2 border-border">
-                      <ImageIcon className="h-12 w-12 text-muted-foreground" />
-                    </div>
-                  )}
-                  <div className="flex flex-col gap-2">
-                    <Input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handleImageUpload(e, 'banner')}
-                      disabled={uploading === 'banner'}
-                      className="cursor-pointer"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Foto do ambiente da barbearia (Proporção 16:9)
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="border-t border-border pt-6">
-            <h2 className="text-2xl font-bold mb-6">Informações da Barbearia</h2>
-            <div className="space-y-4">
+          {/* Link Personalizado - Apenas para Owner */}
+          {isOwner && (
+            <div>
+              <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+                <LinkIcon className="h-6 w-6 text-primary" />
+                Link Personalizado
+              </h2>
+              <Alert className="mb-4">
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  O link é gerado automaticamente a partir do nome da sua barbearia. 
+                  Para alterá-lo, mude o nome da barbearia abaixo e salve.
+                </AlertDescription>
+              </Alert>
               <div className="space-y-2">
-                <Label htmlFor="barbershopName">Nome da Barbearia</Label>
-                <Input
-                  id="barbershopName"
-                  value={formData.barbershopName}
-                  onChange={(e) => setFormData(prev => ({ ...prev, barbershopName: e.target.value }))}
-                  className="bg-background"
+                <Label>Seu Link Único (Gerado Automaticamente)</Label>
+                <div className="flex items-center gap-2 bg-background border border-border rounded-md px-3 py-2">
+                  <span className="text-sm text-muted-foreground">
+                    {window.location.origin}/book/
+                  </span>
+                  <span className="text-sm font-medium text-primary">
+                    {formData.slug || "seu-link-aqui"}
+                  </span>
+                </div>
+                {formData.slug && (
+                  <p className="text-xs text-muted-foreground">
+                    ✨ Este link é atualizado automaticamente quando você muda o nome da barbearia
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Foto de Perfil */}
+          <div className="border-t border-border pt-6">
+            <h2 className="text-2xl font-bold mb-6">Sua Foto</h2>
+            
+            <div className="flex flex-col items-center gap-4">
+              {formData.avatarUrl ? (
+                <img
+                  src={formData.avatarUrl}
+                  alt="Avatar"
+                  className="w-32 h-32 rounded-full object-cover border-4 border-primary"
                 />
-                <p className="text-xs text-muted-foreground">
-                  💡 Mudar o nome atualiza automaticamente seu link personalizado
+              ) : (
+                <div className="w-32 h-32 rounded-full bg-muted flex items-center justify-center border-4 border-border">
+                  <User className="h-16 w-16 text-muted-foreground" />
+                </div>
+              )}
+              <div className="flex flex-col gap-2 w-full max-w-xs">
+                <Input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => handleImageUpload(e, 'avatar')}
+                  disabled={uploading === 'avatar'}
+                  className="cursor-pointer"
+                />
+                <p className="text-xs text-muted-foreground text-center">
+                  Esta foto será exibida na página de agendamentos (Proporção 1:1)
                 </p>
               </div>
+            </div>
+          </div>
+
+          {/* Banner - Apenas para Owner */}
+          {isOwner && (
+            <div className="border-t border-border pt-6">
+              <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+                <ImageIcon className="h-6 w-6 text-primary" />
+                Foto de Capa
+              </h2>
+              <div className="flex flex-col gap-4">
+                {formData.bannerUrl ? (
+                  <img
+                    src={formData.bannerUrl}
+                    alt="Banner"
+                    className="w-full h-32 object-cover rounded-lg border-2 border-primary"
+                  />
+                ) : (
+                  <div className="w-full h-32 bg-muted flex items-center justify-center rounded-lg border-2 border-border">
+                    <ImageIcon className="h-12 w-12 text-muted-foreground" />
+                  </div>
+                )}
+                <div className="flex flex-col gap-2">
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleImageUpload(e, 'banner')}
+                    disabled={uploading === 'banner'}
+                    className="cursor-pointer"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Foto do ambiente da barbearia (Proporção 16:9)
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Informações */}
+          <div className="border-t border-border pt-6">
+            <h2 className="text-2xl font-bold mb-6">Informações Pessoais</h2>
+            <div className="space-y-4">
+              {/* Nome da Barbearia - Apenas para Owner */}
+              {isOwner && (
+                <div className="space-y-2">
+                  <Label htmlFor="barbershopName">Nome da Barbearia</Label>
+                  <Input
+                    id="barbershopName"
+                    value={formData.barbershopName}
+                    onChange={(e) => setFormData(prev => ({ ...prev, barbershopName: e.target.value }))}
+                    className="bg-background"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    💡 Mudar o nome atualiza automaticamente seu link personalizado
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="fullName">Seu Nome</Label>
@@ -447,40 +472,26 @@ const Settings = () => {
             </div>
           </div>
 
-          <div className="border-t border-border pt-6">
-            <h2 className="text-2xl font-bold mb-6">Automações</h2>
-            <div className="space-y-4">
+          {/* Opção de Aceitar Agendamentos - Apenas para Owner */}
+          {isOwner && (
+            <div className="border-t border-border pt-6">
+              <h2 className="text-2xl font-bold mb-6">Preferências de Agendamento</h2>
               <div className="flex items-center justify-between p-4 rounded-lg bg-background border border-border">
                 <div>
-                  <h3 className="font-semibold">Sistema Anti-Faltas</h3>
+                  <h3 className="font-semibold">Aceitar Agendamentos</h3>
                   <p className="text-sm text-muted-foreground">
-                    Libera automaticamente horários não confirmados
+                    Aparecer como opção de barbeiro na página de agendamentos
                   </p>
                 </div>
                 <Switch
-                  checked={formData.antiFaltasEnabled}
+                  checked={formData.ownerAcceptsAppointments}
                   onCheckedChange={(checked) => 
-                    setFormData(prev => ({ ...prev, antiFaltasEnabled: checked }))
-                  }
-                />
-              </div>
-
-              <div className="flex items-center justify-between p-4 rounded-lg bg-background border border-border">
-                <div>
-                  <h3 className="font-semibold">Lembretes Automáticos</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Envia lembretes 24h e 1h antes do horário
-                  </p>
-                </div>
-                <Switch
-                  checked={formData.remindersEnabled}
-                  onCheckedChange={(checked) => 
-                    setFormData(prev => ({ ...prev, remindersEnabled: checked }))
+                    setFormData(prev => ({ ...prev, ownerAcceptsAppointments: checked }))
                   }
                 />
               </div>
             </div>
-          </div>
+          )}
 
           <div className="flex gap-4 pt-6">
             <Button onClick={handleSave} className="flex-1 shadow-gold" disabled={saving}>

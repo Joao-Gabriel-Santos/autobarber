@@ -138,6 +138,7 @@ export type Database = {
           created_at: string
           updated_at: string
           slug: string
+          owner_accepts_appointments: boolean
         }
         Insert: {
           barber_id: string
@@ -145,6 +146,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
           slug?: string
+          owner_accepts_appointments?: boolean
         }
         Update: {
           barber_id?: string
@@ -152,6 +154,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
           slug?: string
+          owner_accepts_appointments?: boolean
         }
         Relationships: []
       }
@@ -159,27 +162,30 @@ export type Database = {
         Row: {
           id: string
           role: string
-          barbershop_id: string
+          barbershop_id: string | null
           full_name: string | null
           whatsapp: string | null
+          avatar_url: string | null
           created_at: string
           updated_at: string
         }
         Insert: {
           id: string
-          barbershop_id?: string
+          barbershop_id?: string | null
           role?: string
           full_name?: string | null
           whatsapp?: string | null
+          avatar_url?: string | null
           created_at?: string
           updated_at?: string
         }
         Update: {
           id?: string
           role?: string
-          barbershop_id?: string
+          barbershop_id?: string | null
           full_name?: string | null
           whatsapp?: string | null
+          avatar_url?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -263,7 +269,7 @@ export type Database = {
           current_period_end: string 
           created_at: string 
           updated_at: string 
-          cancel_at_period_end: boolean;
+          cancel_at_period_end: boolean
         }
         Insert: {
           id?: string
@@ -276,7 +282,7 @@ export type Database = {
           current_period_end: string 
           created_at?: string
           updated_at?: string
-          cancel_at_period_end: boolean;
+          cancel_at_period_end: boolean
         }
         Update: {
           id?: string
@@ -289,7 +295,7 @@ export type Database = {
           current_period_end?: string 
           created_at?: string
           updated_at?: string 
-          cancel_at_period_end?: boolean;
+          cancel_at_period_end?: boolean
         }
         Relationships: []
       }
