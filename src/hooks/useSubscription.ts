@@ -5,42 +5,35 @@ import { supabase } from '@/integrations/supabase/client';
 // Definição dos planos e suas features
 const PLAN_FEATURES = {
   starter: {
-    // ✅ O QUE TEM
-    walk_in: true,              // Entrada direta
-    services: true,             // Gerenciar serviços
-    finance: true,              // Ver financeiro
-    
-    // ❌ O QUE NÃO TEM
-    online_booking: false,      // Agendamento online
-    schedule: false,            // Configurar horários
-    reminders: false,           // Lembretes automáticos
-    team_management: false,     // Gerenciar equipe
-    custom_link: false,         // Link personalizado
-  },
-  
-  pro: {
-    // ✅ O QUE TEM
     walk_in: true,
     services: true,
     finance: true,
-    online_booking: true,       // ✅ Agendamento online
-    schedule: true,             // ✅ Configurar horários
-    reminders: true,            // ✅ Lembretes automáticos
-    custom_link: true,          // ✅ Link personalizado
-    
-    // ❌ O QUE NÃO TEM
-    team_management: false,     // ❌ SEM gestão de equipe
+    online_booking: false,
+    schedule: false,
+    reminders: false,
+    team_management: false,
+    custom_link: false,
   },
   
-  master: {
-    // ✅ TUDO LIBERADO
+  pro: {
     walk_in: true,
     services: true,
     finance: true,
     online_booking: true,
     schedule: true,
     reminders: true,
-    team_management: true,      // ✅ Gestão de equipe
+    custom_link: true,
+    team_management: false,
+  },
+  
+  master: {
+    walk_in: true,
+    services: true,
+    finance: true,
+    online_booking: true,
+    schedule: true,
+    reminders: true,
+    team_management: true,
     custom_link: true,
   },
 } as const;
@@ -48,15 +41,13 @@ const PLAN_FEATURES = {
 type PlanType = keyof typeof PLAN_FEATURES;
 type FeatureType = keyof typeof PLAN_FEATURES.starter;
 
-// 🚨 NOVO: Interface para o objeto de assinatura do Supabase
 interface SubscriptionData {
-  plan: string; // Vai ser 'starter', 'pro', 'master'
+  plan: string;
   status: 'active' | 'trialing' | 'past_due' | 'canceled' | 'incomplete';
   current_period_end: string;
   cancel_at_period_end: boolean;
 }
 
-// 🚨 NOVO: Interface para o retorno completo do hook
 interface UseSubscriptionReturn {
   currentPlan: PlanType;
   loading: boolean;
@@ -65,22 +56,16 @@ interface UseSubscriptionReturn {
   getFeatures: () => Record<FeatureType, boolean>;
   needsUpgrade: (feature: FeatureType) => boolean;
   getRequiredPlan: (feature: FeatureType) => PlanType | null;
+  suggestUpgrade: (feature: FeatureType) => string | null;
   refresh: () => Promise<void>;
-  
-  // 🚨 PROPRIEDADES FALTANTES QUE O COMPONENTE PRECISA
-  subscription: (SubscriptionData & { plan: PlanType }) | null; // Adicionado
-  hasAccess: boolean; // Adicionado
+  subscription: (SubscriptionData & { plan: PlanType }) | null;
+  hasAccess: boolean;
 }
 
-
-export function useSubscription(): UseSubscriptionReturn { // 🚨 Adicionar o tipo de retorno
+export function useSubscription(): UseSubscriptionReturn {
   const [currentPlan, setCurrentPlan] = useState<PlanType>('starter');
   const [loading, setLoading] = useState(true);
-  
-  // 🚨 NOVO ESTADO: Para armazenar o objeto de assinatura
-  const [subscription, setSubscription] = useState<any>(null); // Usamos 'any' temporariamente ou definimos SubscriptionData completa
-  
-  // 🚨 NOVO ESTADO: Para verificar se tem acesso ativo
+  const [subscription, setSubscription] = useState<any>(null);
   const [hasAccess, setHasAccess] = useState(false);
 
   useEffect(() => {
@@ -100,17 +85,32 @@ export function useSubscription(): UseSubscriptionReturn { // 🚨 Adicionar o t
         return;
       }
 
-      // 🚨 MUDANÇA: Buscar mais campos da subscription para exibir na tela Settings
+      // 🔍 Verificar se é barbeiro (funcionário) ou owner
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, barbershop_id')
+        .eq('id', user.id)
+        .single();
+
+      let ownerId = user.id;
+      
+      // Se for barbeiro, buscar assinatura do owner
+      if (profile?.role === 'barber' && profile.barbershop_id) {
+        ownerId = profile.barbershop_id;
+        console.log('👤 Barbeiro detectado, buscando plano do owner:', ownerId);
+      }
+
+      // Buscar assinatura do owner
       const { data: subData, error } = await supabase
         .from('subscriptions')
-        .select('plan, status, current_period_end, cancel_at_period_end') // 🚨 Adicionado campos
-        .eq('user_id', user.id)
-        .order('current_period_end', { ascending: false }) // Buscar a mais recente
+        .select('plan, status, current_period_end, cancel_at_period_end')
+        .eq('user_id', ownerId)
+        .order('current_period_end', { ascending: false })
         .limit(1)
         .maybeSingle();
 
       if (error) {
-        // ... (seu código de tratamento de erro)
+        console.error('Error loading subscription:', error);
         setSubscription(null);
         setHasAccess(false);
         setCurrentPlan('starter');
@@ -124,7 +124,6 @@ export function useSubscription(): UseSubscriptionReturn { // 🚨 Adicionar o t
       if (subData) {
         const status = subData.status;
         
-        // Verifica se o status é considerado ativo (active ou trialing)
         if (['active', 'trialing'].includes(status)) {
           accessStatus = true;
         }
@@ -136,28 +135,24 @@ export function useSubscription(): UseSubscriptionReturn { // 🚨 Adicionar o t
         }
       }
       
-      // 🚨 ATUALIZAÇÃO DOS NOVOS ESTADOS
-      setSubscription(subData); // Armazena o objeto completo
-      setHasAccess(accessStatus); // Armazena o status booleano
+      setSubscription(subData);
+      setHasAccess(accessStatus);
       setCurrentPlan(finalPlan);
-      
       setLoading(false);
     } catch (error) {
-      // ... (seu código de tratamento de erro)
+      console.error('Error in loadSubscription:', error);
       setSubscription(null);
       setHasAccess(false);
       setCurrentPlan('starter');
       setLoading(false);
     }
   };
+
   const hasFeature = (feature: FeatureType): boolean => {
     const features = PLAN_FEATURES[currentPlan];
     return features[feature] === true;
   };
 
-  /**
-   * Retorna o nome do plano atual formatado
-   */
   const getPlanName = (): string => {
     const names: Record<PlanType, string> = {
       starter: 'Plano Starter',
@@ -167,32 +162,60 @@ export function useSubscription(): UseSubscriptionReturn { // 🚨 Adicionar o t
     return names[currentPlan] || 'Plano Starter';
   };
 
-  /**
-   * Retorna todas as features do plano atual
-   */
   const getFeatures = () => {
     return PLAN_FEATURES[currentPlan];
   };
 
-  /**
-   * Verifica se o usuário precisa fazer upgrade para acessar uma feature
-   */
   const needsUpgrade = (feature: FeatureType): boolean => {
     return !hasFeature(feature);
   };
 
-  /**
-   * Retorna o plano mínimo necessário para uma feature
-   */
   const getRequiredPlan = (feature: FeatureType): PlanType | null => {
-    // Verifica em ordem: starter -> pro -> master
     if (PLAN_FEATURES.starter[feature]) return 'starter';
     if (PLAN_FEATURES.pro[feature]) return 'pro';
     if (PLAN_FEATURES.master[feature]) return 'master';
     return null;
   };
 
- return {
+  /**
+   * Retorna uma mensagem sugerindo upgrade para acessar uma feature
+   */
+  const suggestUpgrade = (feature: FeatureType): string | null => {
+    if (hasFeature(feature)) {
+      return null; // Já tem acesso
+    }
+
+    const requiredPlan = getRequiredPlan(feature);
+    
+    if (!requiredPlan) {
+      return null;
+    }
+
+    const planNames: Record<PlanType, string> = {
+      starter: 'Starter',
+      pro: 'Pro',
+      master: 'Master',
+    };
+
+    // Se está no Starter e precisa de Pro
+    if (currentPlan === 'starter' && requiredPlan === 'pro') {
+      return `Faça upgrade para o Plano Pro para desbloquear esta funcionalidade.`;
+    }
+
+    // Se está no Starter e precisa de Master
+    if (currentPlan === 'starter' && requiredPlan === 'master') {
+      return `Faça upgrade para o Plano Master para desbloquear esta funcionalidade.`;
+    }
+
+    // Se está no Pro e precisa de Master
+    if (currentPlan === 'pro' && requiredPlan === 'master') {
+      return `Faça upgrade para o Plano Master para desbloquear esta funcionalidade.`;
+    }
+
+    return `Faça upgrade para o Plano ${planNames[requiredPlan]} para acessar esta funcionalidade.`;
+  };
+
+  return {
     currentPlan,
     loading,
     hasFeature,
@@ -200,8 +223,9 @@ export function useSubscription(): UseSubscriptionReturn { // 🚨 Adicionar o t
     getFeatures,
     needsUpgrade,
     getRequiredPlan,
+    suggestUpgrade,
     refresh: loadSubscription,
-    subscription, 
-    hasAccess,     
+    subscription,
+    hasAccess,
   };
 }

@@ -117,7 +117,7 @@ const Settings = () => {
 
   const handleImageUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
-    type: 'avatar' | 'banner'
+    type: 'avatar' | 'barbershop-logo' | 'banner'
   ) => {
     if (!e.target.files || !e.target.files[0] || !user) return;
 
@@ -125,8 +125,23 @@ const Settings = () => {
     setUploading(type);
 
     try {
-      const bucketName = type === 'avatar' ? 'avatars' : 'banners';
-      const fileName = `${user.id}/${type}.png`;
+      let bucketName: string;
+      let fileName: string;
+      let fieldName: string;
+      
+      if (type === 'avatar') {
+        bucketName = 'avatars';
+        fileName = `${user.id}/avatar.png`;
+        fieldName = 'avatarUrl';
+      } else if (type === 'barbershop-logo') {
+        bucketName = 'barbershop-logos';
+        fileName = `${barbershopId}/logo.png`;
+        fieldName = 'barbershopAvatarUrl';
+      } else {
+        bucketName = 'banners';
+        fileName = `${barbershopId}/banner.png`;
+        fieldName = 'bannerUrl';
+      }
 
       await supabase.storage
         .from(bucketName)
@@ -148,10 +163,9 @@ const Settings = () => {
         .getPublicUrl(fileName);
 
       const urlWithCache = `${publicUrl}?t=${timestamp}`;
-      const fieldName = type === 'avatar' ? 'avatarUrl' : 'bannerUrl';
       setFormData(prev => ({ ...prev, [fieldName]: urlWithCache }));
 
-      // Atualizar avatar_url no perfil
+      // Atualizar avatar_url no perfil do usuário logado
       if (type === 'avatar') {
         await supabase
           .from("profiles")

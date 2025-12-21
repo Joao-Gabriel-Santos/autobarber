@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Calendar, Settings, TrendingUp, LogOut, Copy, ExternalLink, DollarSign, Users, Lock } from "lucide-react";
+import { Calendar, Settings, TrendingUp, LogOut, Copy, ExternalLink, DollarSign, Users, Lock, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import WalkInAppointment from "@/components/WalkInAppointment";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -24,14 +24,34 @@ const Dashboard = () => {
   const [receitaHoje, setReceitaHoje] = useState(0);
   const [taxaConfirmacao, setTaxaConfirmacao] = useState(0);
 
+  const isOwner = permissions?.role === 'owner';
+  const isBarber = permissions?.role === 'barber';
+
   const loadDashboardStats = async (userId: string) => {
     const today = new Date().toISOString().split("T")[0];
 
-    const { data, error } = await supabase
+    // Barbeiros veem apenas seus agendamentos
+    // Owners veem todos da barbearia
+    let query = supabase
       .from("appointments")
-      .select("status, appointment_date, price")
-      .eq("barber_id", userId)
+      .select("status, appointment_date, price, barber_id")
       .eq("appointment_date", today);
+
+    if (isBarber) {
+      // Filtrar apenas agendamentos deste barbeiro
+      query = query.eq("barber_id", userId);
+    } else if (isOwner && permissions?.ownerId) {
+      // Owner vê seus agendamentos + da equipe
+      const { data: teamMembers } = await supabase
+        .from("profiles")
+        .select("id")
+        .or(`id.eq.${userId},barbershop_id.eq.${userId}`);
+      
+      const barberIds = teamMembers?.map(m => m.id) || [userId];
+      query = query.in("barber_id", barberIds);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error(error);
@@ -76,7 +96,7 @@ const Dashboard = () => {
 
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("full_name")
+        .select("full_name, role, barbershop_id")
         .eq("id", user.id)
         .maybeSingle();
 
@@ -84,10 +104,15 @@ const Dashboard = () => {
         console.error("Error loading profile:", profileError);
       }
 
+      // Se for barbeiro, buscar dados do owner
+      const targetId = profile?.role === 'barber' && profile.barbershop_id 
+        ? profile.barbershop_id 
+        : user.id;
+
       const { data: barbershop, error: barbershopError } = await supabase
         .from("barbershops")
         .select("slug, barbershop_name")
-        .eq("barber_id", user.id)
+        .eq("barber_id", targetId)
         .maybeSingle();
 
       if (barbershopError) {
@@ -200,6 +225,11 @@ const Dashboard = () => {
             <div className="flex items-center gap-4">
               <span className="text-sm text-muted-foreground hidden sm:block">
                 {fullName || user?.email}
+                {isBarber && (
+                  <span className="ml-2 text-xs bg-blue-500/10 text-blue-500 px-2 py-1 rounded">
+                    Barbeiro
+                  </span>
+                )}
               </span>
               <Button variant="outline" size="icon" onClick={() => navigate("/settings")}>
                 <Settings className="h-4 w-4" />
@@ -211,22 +241,23 @@ const Dashboard = () => {
           </div>
         </div>
       </header>
-      {/* ... (Header e Stats permanecem iguais) */}
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
-        {/* Mostrar plano atual */}
         <div className="mb-8 flex items-center justify-between">
           <div>
             <h1 className="text-4xl font-bold mb-2">
               Olá, <span className="text-primary">{fullName || "Barbeiro"}</span>
             </h1>
             <p className="text-muted-foreground">
-              Bem-vindo ao painel da {barbershopName || "sua barbearia"}
+              {isBarber 
+                ? `Você é barbeiro da ${barbershopName || "barbearia"}`
+                : `Bem-vindo ao painel da ${barbershopName || "sua barbearia"}`
+              }
             </p>
           </div>
           
-          {/* Botão de Entrada Direta - DISPONÍVEL EM TODOS OS PLANOS */}
+          {/* Entrada Direta - Disponível para todos */}
           {user && hasFeature('walk_in') && (
             <WalkInAppointment 
               barberId={user.id} 
@@ -235,38 +266,99 @@ const Dashboard = () => {
           )}
         </div>
 
-        {/* Quick Stats */}
-        <div className="grid md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-muted-foreground text-sm">Agendamentos Hoje</span>
-              <Calendar className="h-4 w-4 text-primary" />
+        {/* Quick Stats - Apenas para Owner */}
+        {isOwner && (
+          <div className="grid md:grid-cols-3 gap-6 mb-8">
+            <div className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-muted-foreground text-sm">Agendamentos Hoje</span>
+                <Calendar className="h-4 w-4 text-primary" />
+              </div>
+              <p className="text-3xl font-bold">{totalHoje}</p>
             </div>
-            <p className="text-3xl font-bold">{totalHoje}</p>
-          </div>
 
-          <div className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-muted-foreground text-sm">Receita do Dia</span>
-              <TrendingUp className="h-4 w-4 text-primary" />
+            <div className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-muted-foreground text-sm">Receita do Dia</span>
+                <TrendingUp className="h-4 w-4 text-primary" />
+              </div>
+              <p className="text-3xl font-bold">R${receitaHoje.toFixed(2)}</p>
             </div>
-            <p className="text-3xl font-bold">R${receitaHoje.toFixed(2)}</p>
-          </div>
 
-          <div className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-muted-foreground text-sm">Taxa de Confirmação</span>
-              <TrendingUp className="h-4 w-4 text-primary" />
+            <div className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-muted-foreground text-sm">Taxa de Confirmação</span>
+                <TrendingUp className="h-4 w-4 text-primary" />
+              </div>
+              <p className="text-3xl font-bold">{taxaConfirmacao}%</p>
             </div>
-            <p className="text-3xl font-bold">{taxaConfirmacao}%</p>
           </div>
-        </div>
+        )}
 
-        {/* Action Cards - COM RESTRIÇÕES POR PLANO */}
+        {/* Quick Stats - Para Barbeiros */}
+        {isBarber && (
+          <div className="grid md:grid-cols-2 gap-6 mb-8">
+            <div className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-muted-foreground text-sm">Meus Agendamentos Hoje</span>
+                <Calendar className="h-4 w-4 text-primary" />
+              </div>
+              <p className="text-3xl font-bold">{totalHoje}</p>
+            </div>
+
+            <div className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-muted-foreground text-sm">Taxa de Confirmação</span>
+                <TrendingUp className="h-4 w-4 text-primary" />
+              </div>
+              <p className="text-3xl font-bold">{taxaConfirmacao}%</p>
+            </div>
+          </div>
+        )}
+
+        {/* Action Cards */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           
-          {/* 1️⃣ SERVIÇOS - Todos os planos */}
-          {hasFeature('services') && (
+          {/* HORÁRIOS - Disponível para TODOS (owner e barbeiro) */}
+          <div
+            className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
+            onClick={() => navigate("/dashboard/schedule")}
+          >
+            <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+              <Clock className="h-6 w-6 text-primary" />
+            </div>
+            <h3 className="font-bold text-xl mb-2">
+              {isBarber ? "Meus Horários" : "Horários"}
+            </h3>
+            <p className="text-muted-foreground text-sm">
+              {isBarber 
+                ? "Configure sua disponibilidade semanal"
+                : "Configure horários de funcionamento"
+              }
+            </p>
+          </div>
+
+          {/* AGENDAMENTOS - Disponível para TODOS (owner e barbeiro) */}
+          <div
+            className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
+            onClick={() => navigate("/dashboard/appointments")}
+          >
+            <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+              <Calendar className="h-6 w-6 text-primary" />
+            </div>
+            <h3 className="font-bold text-xl mb-2">
+              {isBarber ? "Meus Agendamentos" : "Agendamentos"}
+            </h3>
+            <p className="text-muted-foreground text-sm">
+              {isBarber
+                ? "Visualize e gerencie seus agendamentos"
+                : "Visualize e gerencie todos os agendamentos"
+              }
+            </p>
+          </div>
+
+          {/* SERVIÇOS - Apenas Owner */}
+          {isOwner && hasFeature('services') && (
             <div
               className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
               onClick={() => navigate("/dashboard/services")}
@@ -274,87 +366,15 @@ const Dashboard = () => {
               <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                 <Settings className="h-6 w-6 text-primary" />
               </div>
-              <h3 className="font-bold text-xl mb-2">Meus Serviços</h3>
+              <h3 className="font-bold text-xl mb-2">Serviços</h3>
               <p className="text-muted-foreground text-sm">
                 Gerencie preços, duração e fotos dos cortes
               </p>
             </div>
           )}
 
-          {/* 2️⃣ HORÁRIOS - Apenas Pro e Master */}
-          {hasFeature('schedule') ? (
-            <div
-              className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
-              onClick={() => navigate("/dashboard/schedule")}
-            >
-              <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                <Calendar className="h-6 w-6 text-primary" />
-              </div>
-              <h3 className="font-bold text-xl mb-2">Horários</h3>
-              <p className="text-muted-foreground text-sm">
-                Configure sua disponibilidade semanal
-              </p>
-            </div>
-          ) : (
-            <div className="bg-card border border-border rounded-xl p-6 opacity-50 relative">
-              <div className="absolute top-4 right-4">
-                <Lock className="h-5 w-5 text-muted-foreground" />
-              </div>
-              <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center mb-4">
-                <Calendar className="h-6 w-6 text-muted-foreground" />
-              </div>
-              <h3 className="font-bold text-xl mb-2">Horários</h3>
-              <p className="text-muted-foreground text-sm mb-3">
-                Configure sua disponibilidade semanal
-              </p>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => navigate("/signup")}
-              >
-                Upgrade para Pro
-              </Button>
-            </div>
-          )}
-
-          {/* 3️⃣ AGENDAMENTOS - Apenas Pro e Master */}
-          {hasFeature('online_booking') ? (
-            <div
-              className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
-              onClick={() => navigate("/dashboard/appointments")}
-            >
-              <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                <TrendingUp className="h-6 w-6 text-primary" />
-              </div>
-              <h3 className="font-bold text-xl mb-2">Agendamentos</h3>
-              <p className="text-muted-foreground text-sm">
-                Visualize e gerencie seus agendamentos
-              </p>
-            </div>
-          ) : (
-            <div className="bg-card border border-border rounded-xl p-6 opacity-50 relative">
-              <div className="absolute top-4 right-4">
-                <Lock className="h-5 w-5 text-muted-foreground" />
-              </div>
-              <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center mb-4">
-                <TrendingUp className="h-6 w-6 text-muted-foreground" />
-              </div>
-              <h3 className="font-bold text-xl mb-2">Agendamentos</h3>
-              <p className="text-muted-foreground text-sm mb-3">
-                Visualize e gerencie seus agendamentos
-              </p>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => navigate("/signup")}
-              >
-                Upgrade para Pro
-              </Button>
-            </div>
-          )}
-
-          {/* 4️⃣ FINANCEIRO - Todos os planos */}
-          {hasFeature('finance') && (
+          {/* FINANCEIRO - Apenas Owner */}
+          {isOwner && hasFeature('finance') && (
             <div
               className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
               onClick={() => navigate("/dashboard/finance")}
@@ -369,8 +389,8 @@ const Dashboard = () => {
             </div>
           )}
 
-          {/* 5️⃣ EQUIPE - Apenas Master */}
-          {hasFeature('team_management') ? (
+          {/* EQUIPE - Apenas Owner Master */}
+          {isOwner && hasFeature('team_management') ? (
             <div
               className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
               onClick={() => navigate("/dashboard/team")}
@@ -383,7 +403,7 @@ const Dashboard = () => {
                 Gerencie barbeiros e convites da equipe
               </p>
             </div>
-          ) : (
+          ) : isOwner && (
             <div className="bg-card border border-border rounded-xl p-6 opacity-50 relative">
               <div className="absolute top-4 right-4">
                 <Lock className="h-5 w-5 text-muted-foreground" />
@@ -406,8 +426,8 @@ const Dashboard = () => {
           )}
         </div>
 
-        {/* Link Público - Apenas Pro e Master */}
-        {hasFeature('custom_link') && (
+        {/* Link Público - Apenas Owner Pro e Master */}
+        {isOwner && hasFeature('custom_link') && (
           <div className="mt-8">
             <Card className="p-6 border-border bg-card">
               <h3 className="font-bold text-lg mb-2">Link de Agendamento</h3>
@@ -447,6 +467,38 @@ const Dashboard = () => {
                     Seu link personalizado: <span className="text-primary font-medium">{barbershopSlug}</span>
                   </p>
                 </>
+              )}
+            </Card>
+          </div>
+        )}
+
+        {/* Informação para Barbeiros sobre o Link */}
+        {isBarber && (
+          <div className="mt-8">
+            <Card className="p-6 border-border bg-card">
+              <h3 className="font-bold text-lg mb-2">Link de Agendamento da Barbearia</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Os clientes usam este link para agendar horários. Você aparece como uma das opções de barbeiro:
+              </p>
+              {barbershopSlug ? (
+                <div className="flex gap-2">
+                  <Input
+                    readOnly
+                    value={`${window.location.origin}/book/${barbershopSlug}`}
+                    className="flex-1 bg-background"
+                  />
+                  <Button onClick={copyBookingLink}>
+                    <Copy className="h-4 w-4 mr-2" />
+                    Copiar
+                  </Button>
+                  <Button onClick={openBookingPage} variant="outline">
+                    <ExternalLink className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  O dono ainda não configurou o link da barbearia.
+                </p>
               )}
             </Card>
           </div>

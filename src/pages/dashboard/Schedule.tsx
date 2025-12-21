@@ -272,14 +272,6 @@ const Schedule = () => {
               </Button>
               <h1 className="text-2xl font-bold">Horários de Funcionamento</h1>
             </div>
-            <Button 
-              onClick={handleSaveAll} 
-              disabled={saving}
-              className="shadow-gold"
-              size="lg"
-            >
-              {saving ? "Salvando..." : "Salvar Todos os Horários"}
-            </Button>
           </div>
         </div>
       </header>
