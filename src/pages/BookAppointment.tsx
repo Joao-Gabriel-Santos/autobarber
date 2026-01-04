@@ -207,6 +207,10 @@ const BookAppointment = () => {
 
       setBarbers(barbersList);
 
+    if (barbersList.length === 1) {
+        setSelectedBarber(barbersList[0]);
+      }
+
     } catch (error: any) {
       toast({
         title: "Erro ao carregar dados",
@@ -219,7 +223,6 @@ const BookAppointment = () => {
   };
 
   const loadBarberSchedule = async (barberId: string) => {
-    // Load working hours for selected barber
     const { data: hoursData, error: hoursError } = await supabase
       .from("working_hours")
       .select("*")
@@ -233,7 +236,6 @@ const BookAppointment = () => {
       setWorkingHours(hoursData || []);
     }
 
-    // Load breaks for selected barber
     const { data: breaksData, error: breaksError } = await supabase
       .from("breaks")
       .select("*")
@@ -247,7 +249,6 @@ const BookAppointment = () => {
     }
   };
 
-  // Atualizar horários quando barbeiro for selecionado
   useEffect(() => {
     if (selectedBarber) {
       loadBarberSchedule(selectedBarber.id);
@@ -281,11 +282,10 @@ const BookAppointment = () => {
       return;
     }
 
-    // Buscar agendamentos existentes DESTE BARBEIRO para esta data
     const { data: existingAppointments } = await supabase
       .from("appointments")
       .select("appointment_time, services(duration)")
-      .eq("barber_id", selectedBarber.id) // Filtrar por barbeiro selecionado
+      .eq("barber_id", selectedBarber.id)
       .eq("appointment_date", format(selectedDate, "yyyy-MM-dd"))
       .in("status", ["pending", "confirmed"]);
 
@@ -384,7 +384,7 @@ const BookAppointment = () => {
       const { error } = await supabase
         .from("appointments")
         .insert([{
-          barber_id: selectedBarber.id, // Usar o ID do barbeiro selecionado
+          barber_id: selectedBarber.id,
           service_id: selectedService.id,
           appointment_date: format(selectedDate, "yyyy-MM-dd"),
           appointment_time: selectedTime,
@@ -401,7 +401,6 @@ const BookAppointment = () => {
         description: "Aguarde a confirmação do barbeiro.",
       });
 
-      // Reset form
       setSelectedService(null);
       setSelectedBarber(null);
       setSelectedDate(undefined);
@@ -455,8 +454,11 @@ const BookAppointment = () => {
     );
   }
 
+  const showBarberSelector = barbers.length > 1;
+
   return (
     <div className="min-h-screen bg-gradient-dark">
+      {/* Header */}
       <header className="relative border-b border-border">
         {barbershopInfo.banner_url && (
           <div className="h-48 overflow-hidden">
@@ -501,10 +503,11 @@ const BookAppointment = () => {
         <div className="grid lg:grid-cols-2 gap-8">
           {/* Services and Barber Selection */}
           <div className="space-y-6">
-            {/* Barber Selection */}
+            {/* Barber Selection - CORRIGIDO PARA MOBILE */}
+            {showBarberSelector && (
             <div>
               <h2 className="text-2xl font-bold mb-4">Escolha o Barbeiro</h2>
-              <div className="grid md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {barbers.map((barber) => (
                   <Card
                     key={barber.id}
@@ -531,7 +534,7 @@ const BookAppointment = () => {
                 ))}
               </div>
             </div>
-
+            )}
             {/* Service Selection */}
             <div>
               <h2 className="text-2xl font-bold mb-4">Escolha o Serviço</h2>
@@ -574,7 +577,15 @@ const BookAppointment = () => {
           <div>
             <h2 className="text-2xl font-bold mb-4">Dados do Agendamento</h2>
             <Card className="p-6 border-border bg-card space-y-6">
-              {selectedBarber && (
+              {!showBarberSelector && selectedBarber && (
+                <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
+                  <p className="text-sm font-semibold text-primary">
+                    Agendamento com: {selectedBarber.full_name}
+                  </p>
+                </div>
+              )}
+
+              {showBarberSelector && selectedBarber && (
                 <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
                   <p className="text-sm font-semibold text-primary">
                     Barbeiro selecionado: {selectedBarber.full_name}
