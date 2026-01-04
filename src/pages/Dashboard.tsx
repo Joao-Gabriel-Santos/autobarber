@@ -294,6 +294,7 @@ const Dashboard = () => {
             </div>
           </div>
         )}
+        
 
         {/* Quick Stats - Para Barbeiros */}
         {isBarber && (
@@ -319,43 +320,87 @@ const Dashboard = () => {
         {/* Action Cards */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           
-          {/* HORÁRIOS - Disponível para TODOS (owner e barbeiro) */}
-          <div
-            className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
-            onClick={() => navigate("/dashboard/schedule")}
-          >
-            <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-              <Clock className="h-6 w-6 text-primary" />
+          {/* HORÁRIOS - Bloqueado para Starter */}
+          {hasFeature('schedule') ? (
+            <div
+              className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
+              onClick={() => navigate("/dashboard/schedule")}
+            >
+              <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <Clock className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="font-bold text-xl mb-2">
+                {isBarber ? "Meus Horários" : "Horários"}
+              </h3>
+              <p className="text-muted-foreground text-sm">
+                {isBarber 
+                  ? "Configure sua disponibilidade semanal"
+                  : "Configure horários de funcionamento"
+                }
+              </p>
             </div>
-            <h3 className="font-bold text-xl mb-2">
-              {isBarber ? "Meus Horários" : "Horários"}
-            </h3>
-            <p className="text-muted-foreground text-sm">
-              {isBarber 
-                ? "Configure sua disponibilidade semanal"
-                : "Configure horários de funcionamento"
-              }
-            </p>
-          </div>
+          ) : (
+            <div className="bg-card border border-border rounded-xl p-6 opacity-50 relative">
+              <div className="absolute top-4 right-4">
+                <Lock className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center mb-4">
+                <Clock className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <h3 className="font-bold text-xl mb-2">Horários</h3>
+              <p className="text-muted-foreground text-sm mb-3">
+                Configure horários de funcionamento
+              </p>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => navigate("/signup")}
+              >
+                Upgrade para Pro
+              </Button>
+            </div>
+          )}
 
-          {/* AGENDAMENTOS - Disponível para TODOS (owner e barbeiro) */}
-          <div
-            className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
-            onClick={() => navigate("/dashboard/appointments")}
-          >
-            <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-              <Calendar className="h-6 w-6 text-primary" />
+          {/* AGENDAMENTOS - Bloqueado para Starter */}
+          {hasFeature('online_booking') ? (
+            <div
+              className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
+              onClick={() => navigate("/dashboard/appointments")}
+            >
+              <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <Calendar className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="font-bold text-xl mb-2">
+                {isBarber ? "Meus Agendamentos" : "Agendamentos"}
+              </h3>
+              <p className="text-muted-foreground text-sm">
+                {isBarber
+                  ? "Visualize e gerencie seus agendamentos"
+                  : "Visualize e gerencie todos os agendamentos"
+                }
+              </p>
             </div>
-            <h3 className="font-bold text-xl mb-2">
-              {isBarber ? "Meus Agendamentos" : "Agendamentos"}
-            </h3>
-            <p className="text-muted-foreground text-sm">
-              {isBarber
-                ? "Visualize e gerencie seus agendamentos"
-                : "Visualize e gerencie todos os agendamentos"
-              }
-            </p>
-          </div>
+          ) : (
+            <div className="bg-card border border-border rounded-xl p-6 opacity-50 relative">
+              <div className="absolute top-4 right-4">
+                <Lock className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center mb-4">
+                <Calendar className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <h3 className="font-bold text-xl mb-2">Agendamentos</h3>
+              <p className="text-muted-foreground text-sm mb-3">
+                Sistema de agendamento online
+              </p>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => navigate("/signup")}
+              >
+                Upgrade para Pro
+              </Button>
+            </div>
+          )}     
 
           {/* SERVIÇOS - Apenas Owner */}
           {isOwner && hasFeature('services') && (
