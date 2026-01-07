@@ -123,8 +123,10 @@ export function useSubscription(): UseSubscriptionReturn {
       
       if (subData) {
         const status = subData.status;
+        const currentPeriodEnd = new Date(subData.current_period_end);
+        const now = new Date();
         
-        if (['active', 'trialing'].includes(status)) {
+        if (['active', 'trialing'].includes(status) && currentPeriodEnd > now) {
           accessStatus = true;
         }
 

@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import WalkInAppointment from "@/components/WalkInAppointment";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useSubscription } from "@/hooks/useSubscription";
+import { SubscriptionGate } from "@/components/SubscriptionGate";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -209,6 +210,7 @@ const Dashboard = () => {
   }
 
   return (
+    <SubscriptionGate>
     <div className="min-h-screen bg-gradient-dark">
       {/* Header */}
       <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
@@ -550,6 +552,7 @@ const Dashboard = () => {
         )}
       </main>
     </div>
+    </SubscriptionGate>
   );
 };
 

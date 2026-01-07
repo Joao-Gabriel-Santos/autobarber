@@ -115,6 +115,35 @@ const Settings = () => {
     }
   };
 
+  const getSubscriptionStatus = (subscription: any) => {
+  if (!subscription) return { status: 'inactive', label: 'Inativa', color: 'bg-red-500' };
+  
+  const currentPeriodEnd = new Date(subscription.current_period_end);
+  const now = new Date();
+  const isExpired = currentPeriodEnd <= now;
+  
+  // Se expirou, marcar como expirado independente do status
+  if (isExpired) {
+    return { 
+      status: 'expired', 
+      label: 'Expirado', 
+      color: 'bg-red-500' 
+    };
+  }
+  
+  // Se não expirou, verificar status
+  switch (subscription.status) {
+    case 'active':
+      return { status: 'active', label: 'Ativo', color: 'bg-green-500' };
+    case 'trialing':
+      return { status: 'trialing', label: 'Período de Teste', color: 'bg-blue-500' };
+    case 'past_due':
+      return { status: 'past_due', label: 'Pagamento Atrasado', color: 'bg-yellow-500' };
+    default:
+      return { status: 'cancelled', label: 'Cancelado', color: 'bg-red-500' };
+  }
+};
+
   const handleImageUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     type: 'avatar' | 'barbershop-logo' | 'banner'
@@ -332,11 +361,13 @@ const Settings = () => {
           )}
           
           {!hasAccess && (
-            <Alert variant="destructive">
+            <div className="container mx-auto px-4 py-3 max-w-2xl">
+              <Alert variant="destructive">
               <AlertDescription>
-                Sua assinatura expirou. Renove para continuar usando o AutoBarber.
+                ⚠️ Sua assinatura expirou. Renove para continuar usando o AutoBarber.
               </AlertDescription>
             </Alert>
+            </div>
           )}
         </div>
       )}
