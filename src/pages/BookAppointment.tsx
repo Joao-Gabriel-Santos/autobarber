@@ -391,14 +391,14 @@ const BookAppointment = () => {
           client_name: clientName,
           client_whatsapp: normalizedWhatsapp,
           price: selectedService.price,
-          status: "pending",
+          status: "confirmed",
         }]);
 
       if (error) throw error;
 
       toast({
-        title: "Agendamento realizado!",
-        description: "Aguarde a confirmação do barbeiro.",
+        title: "✅ Agendamento realizado!",
+        description: "Seu horário foi confirmado com sucesso.",
       });
 
       setSelectedService(null);

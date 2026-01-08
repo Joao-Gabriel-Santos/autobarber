@@ -25,14 +25,12 @@ interface Appointment {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  pending: "Pendente",
   confirmed: "Confirmado",
   completed: "Concluído",
   cancelled: "Cancelado",
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  pending: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
   confirmed: "bg-blue-500/10 text-blue-500 border-blue-500/20",
   completed: "bg-green-500/10 text-green-500 border-green-500/20",
   cancelled: "bg-red-500/10 text-red-500 border-red-500/20",
@@ -44,7 +42,7 @@ const Appointments = () => {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [activeTab, setActiveTab] = useState("pending");
+  const [activeTab, setActiveTab] = useState("confirmed");
 
   useEffect(() => {
     checkUser();
@@ -123,12 +121,7 @@ const Appointments = () => {
   };
 
   const getFilteredAppointments = (status: string) => {
-    return appointments.filter(apt => {
-      if (status === "pending") {
-        return apt.status === "pending" || apt.status === "confirmed";
-      }
-      return apt.status === status;
-    });
+    return appointments.filter(apt => apt.status === status);
   };
 
   const renderAppointmentCard = (appointment: Appointment) => (
@@ -172,13 +165,14 @@ const Appointments = () => {
         </div>
       </div>
 
-      {appointment.status === "pending" && (
+      {appointment.status === "confirmed" && (
         <div className="flex gap-2">
           <Button
             size="sm"
-            onClick={() => updateStatus(appointment.id, "confirmed")}
+            onClick={() => updateStatus(appointment.id, "completed")}
+            className="flex-1"
           >
-            Confirmar
+            Marcar como Concluído
           </Button>
           <Button
             size="sm"
@@ -188,15 +182,6 @@ const Appointments = () => {
             Cancelar
           </Button>
         </div>
-      )}
-
-      {appointment.status === "confirmed" && (
-        <Button
-          size="sm"
-          onClick={() => updateStatus(appointment.id, "completed")}
-        >
-          Marcar como Concluído
-        </Button>
       )}
     </Card>
   );
@@ -212,7 +197,7 @@ const Appointments = () => {
     );
   }
 
-  const pendingCount = getFilteredAppointments("pending").length;
+  const confirmedCount = getFilteredAppointments("confirmed").length;
   const completedCount = getFilteredAppointments("completed").length;
   const cancelledCount = getFilteredAppointments("cancelled").length;
 
@@ -232,11 +217,11 @@ const Appointments = () => {
       <main className="container mx-auto px-4 py-8 max-w-4xl">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="pending" className="relative">
-              Pendentes
-              {pendingCount > 0 && (
-                <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-yellow-500/20 text-yellow-500">
-                  {pendingCount}
+            <TabsTrigger value="confirmed" className="relative">
+              Confirmados
+              {confirmedCount > 0 && (
+                <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-blue-500/20 text-blue-500">
+                  {confirmedCount}
                 </span>
               )}
             </TabsTrigger>
@@ -258,15 +243,15 @@ const Appointments = () => {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="pending" className="space-y-4">
-            {getFilteredAppointments("pending").length === 0 ? (
+          <TabsContent value="confirmed" className="space-y-4">
+            {getFilteredAppointments("confirmed").length === 0 ? (
               <Card className="p-12 text-center border-border bg-card">
                 <p className="text-muted-foreground">
-                  Nenhum agendamento pendente ou confirmado.
+                  Nenhum agendamento confirmado.
                 </p>
               </Card>
             ) : (
-              getFilteredAppointments("pending").map(renderAppointmentCard)
+              getFilteredAppointments("confirmed").map(renderAppointmentCard)
             )}
           </TabsContent>
 

@@ -142,8 +142,8 @@ const Schedule = () => {
       if (dayOfWeek === 1 && field === 'active' && value === true && !prev[dayOfWeek]?.active) {
         // Verificar se já tem horários configurados em outros dias
         const hasOtherDays = Object.keys(prev).some(key => parseInt(key) !== 1 && prev[parseInt(key)]?.active);
-        
-        if (!hasOtherDays) {
+        const mondayHasShedule = updated[1]?.start_time && updated[1]?.end_time;
+        if (!hasOtherDays && mondayHasShedule) {
           // Aguardar um pouco para o estado atualizar e então mostrar o diálogo
           setTimeout(() => {
             setSourceDayIndex(dayOfWeek);
@@ -366,9 +366,6 @@ const Schedule = () => {
                 </Button>
                 <div>
                   <h1 className="text-2xl font-bold">Horários de Funcionamento</h1>
-                  <p className="text-sm text-muted-foreground">
-                    💡 Configure a segunda-feira e copie para outros dias
-                  </p>
                 </div>
               </div>
             </div>
@@ -376,6 +373,16 @@ const Schedule = () => {
         </header>
 
         <main className="container mx-auto px-4 py-8 max-w-4xl">
+          <div className="mt-6 flex justify py-3">
+            <Button 
+              onClick={handleSaveAll} 
+              disabled={saving}
+              className="shadow-gold"
+              size="lg"
+            >
+              {saving ? "Salvando..." : "Salvar Todos os Horários"}
+            </Button>
+          </div>
           <div className="space-y-4">
             {DAYS_ORDERED.map((index) => {
               const currentHour = workingHours[index];
