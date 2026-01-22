@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import { ArrowLeft, Settings as SettingsIcon, User, Image as ImageIcon, LinkIcon, Info, CreditCard } from "lucide-react";
+import { ArrowLeft, Settings, User, Image, Link, Info, CreditCard } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -13,7 +13,7 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { Badge } from "@/components/ui/badge";
 import { usePermissions } from "@/hooks/usePermissions";
 
-const Settings = () => {
+const SettingsPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { permissions } = usePermissions();
@@ -22,6 +22,7 @@ const Settings = () => {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [bannerPosition, setBannerPosition] = useState(50);
   const [formData, setFormData] = useState({
     barbershopName: "",
     fullName: "",
@@ -31,7 +32,7 @@ const Settings = () => {
     slug: "",
     antiFaltasEnabled: true,
     remindersEnabled: true,
-    ownerAcceptsAppointments: true, // Nova opção
+    ownerAcceptsAppointments: true,
   });
   const { subscription, hasAccess } = useSubscription();
 
@@ -58,12 +59,10 @@ const Settings = () => {
         .eq("id", user.id)
         .single();
       
-      // Buscar dados da barbearia (se for owner) ou do owner (se for barbeiro)
       let barbershopData = null;
       let targetId = user.id;
       
       if (profile?.role === 'barber' && profile.barbershop_id) {
-        // Se for barbeiro, buscar dados do owner
         targetId = profile.barbershop_id;
       }
       
@@ -82,7 +81,6 @@ const Settings = () => {
         
         const timestamp = new Date().getTime();
         
-        // Para barbeiros, buscar sua própria foto
         const photoUserId = profile?.role === 'barber' ? user.id : barbershop.barber_id;
         
         const { data: { publicUrl: avatarUrl } } = supabase
@@ -106,6 +104,10 @@ const Settings = () => {
           remindersEnabled: true,
           ownerAcceptsAppointments: barbershop.owner_accepts_appointments ?? true,
         });
+        
+        if (barbershop.banner_position !== null && barbershop.banner_position !== undefined) {
+          setBannerPosition(barbershop.banner_position);
+        }
       }
     } catch (error) {
       console.error("Error checking user:", error);
@@ -114,35 +116,6 @@ const Settings = () => {
       setLoading(false);
     }
   };
-
-  const getSubscriptionStatus = (subscription: any) => {
-  if (!subscription) return { status: 'inactive', label: 'Inativa', color: 'bg-red-500' };
-  
-  const currentPeriodEnd = new Date(subscription.current_period_end);
-  const now = new Date();
-  const isExpired = currentPeriodEnd <= now;
-  
-  // Se expirou, marcar como expirado independente do status
-  if (isExpired) {
-    return { 
-      status: 'expired', 
-      label: 'Expirado', 
-      color: 'bg-red-500' 
-    };
-  }
-  
-  // Se não expirou, verificar status
-  switch (subscription.status) {
-    case 'active':
-      return { status: 'active', label: 'Ativo', color: 'bg-green-500' };
-    case 'trialing':
-      return { status: 'trialing', label: 'Período de Teste', color: 'bg-blue-500' };
-    case 'past_due':
-      return { status: 'past_due', label: 'Pagamento Atrasado', color: 'bg-yellow-500' };
-    default:
-      return { status: 'cancelled', label: 'Cancelado', color: 'bg-red-500' };
-  }
-};
 
   const handleImageUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -194,7 +167,6 @@ const Settings = () => {
       const urlWithCache = `${publicUrl}?t=${timestamp}`;
       setFormData(prev => ({ ...prev, [fieldName]: urlWithCache }));
 
-      // Atualizar avatar_url no perfil do usuário logado
       if (type === 'avatar') {
         await supabase
           .from("profiles")
@@ -225,7 +197,6 @@ const Settings = () => {
     setSaving(true);
     
     try {
-      // 1️⃣ Atualizar profile
       const { error: profileError } = await supabase
         .from("profiles")
         .upsert({
@@ -236,20 +207,19 @@ const Settings = () => {
 
       if (profileError) throw profileError;
 
-      // 2️⃣ Atualizar barbershop (apenas se for owner)
       if (isOwner) {
         const { error: barbershopError } = await supabase
           .from("barbershops")
           .update({
             barbershop_name: formData.barbershopName,
             owner_accepts_appointments: formData.ownerAcceptsAppointments,
+            banner_position: bannerPosition,
           })
           .eq("barber_id", barbershopId);
 
         if (barbershopError) throw barbershopError;
       }
 
-      // 3️⃣ Recarregar dados
       await checkUser();
 
       toast({
@@ -284,14 +254,13 @@ const Settings = () => {
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div className="flex items-center gap-2">
-              <SettingsIcon className="h-5 w-5 text-primary" />
+              <Settings className="h-5 w-5 text-primary" />
               <h1 className="text-xl font-bold">Configurações</h1>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Mostrar assinatura APENAS para owners */}
       {isOwner && (
         <div className="border-b border-border pb-6 mb-6">
           <h2 className="container text-2xl font-bold py-6 mb-3 flex items-center gap-2">
@@ -363,10 +332,10 @@ const Settings = () => {
           {!hasAccess && (
             <div className="container mx-auto px-4 py-3 max-w-2xl">
               <Alert variant="destructive">
-              <AlertDescription>
-                ⚠️ Sua assinatura expirou. Renove para continuar usando o AutoBarber.
-              </AlertDescription>
-            </Alert>
+                <AlertDescription>
+                  ⚠️ Sua assinatura expirou. Renove para continuar usando o AutoBarber.
+                </AlertDescription>
+              </Alert>
             </div>
           )}
         </div>
@@ -374,11 +343,10 @@ const Settings = () => {
 
       <main className="container mx-auto px-4 py-8 max-w-2xl">
         <Card className="p-8 border-border bg-card space-y-8">
-          {/* Link Personalizado - Apenas para Owner */}
           {isOwner && (
             <div>
               <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-                <LinkIcon className="h-6 w-6 text-primary" />
+                <Link className="h-6 w-6 text-primary" />
                 Link Personalizado
               </h2>
               <Alert className="mb-4">
@@ -407,7 +375,6 @@ const Settings = () => {
             </div>
           )}
 
-          {/* Foto de Perfil */}
           <div className="border-t border-border pt-6">
             <h2 className="text-2xl font-bold mb-6">Sua Foto</h2>
             
@@ -432,29 +399,52 @@ const Settings = () => {
                   className="cursor-pointer"
                 />
                 <p className="text-xs text-muted-foreground text-center">
-                  Esta foto será exibida na página de agendamentos (Proporção 1:1)
+                  Esta foto será exibida na página de agendamentos
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Banner - Apenas para Owner */}
           {isOwner && (
             <div className="border-t border-border pt-6">
               <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-                <ImageIcon className="h-6 w-6 text-primary" />
+                <Image className="h-6 w-6 text-primary" />
                 Foto de Capa
               </h2>
               <div className="flex flex-col gap-4">
                 {formData.bannerUrl ? (
-                  <img
-                    src={formData.bannerUrl}
-                    alt="Banner"
-                    className="w-full h-32 object-cover rounded-lg border-2 border-primary"
-                  />
+                  <div className="space-y-4">
+                    <div className="relative w-full h-32 rounded-lg border-2 border-primary overflow-hidden bg-muted">
+                      <img
+                        src={formData.bannerUrl}
+                        alt="Banner"
+                        className="w-full h-full object-cover"
+                        style={{
+                          objectPosition: `center ${bannerPosition}%`
+                        }}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="bannerPosition" className="text-sm">
+                        Ajustar Posição Vertical
+                      </Label>
+                      <input
+                        id="bannerPosition"
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={bannerPosition}
+                        onChange={(e) => setBannerPosition(Number(e.target.value))}
+                        className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                      />
+                      <p className="text-xs text-muted-foreground text-center">
+                        Arraste para reposicionar a imagem
+                      </p>
+                    </div>
+                  </div>
                 ) : (
                   <div className="w-full h-32 bg-muted flex items-center justify-center rounded-lg border-2 border-border">
-                    <ImageIcon className="h-12 w-12 text-muted-foreground" />
+                    <Image className="h-12 w-12 text-muted-foreground" />
                   </div>
                 )}
                 <div className="flex flex-col gap-2">
@@ -466,18 +456,16 @@ const Settings = () => {
                     className="cursor-pointer"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Foto do ambiente da barbearia (Proporção 16:9)
+                    Foto do ambiente da barbearia
                   </p>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Informações */}
           <div className="border-t border-border pt-6">
             <h2 className="text-2xl font-bold mb-6">Informações Pessoais</h2>
             <div className="space-y-4">
-              {/* Nome da Barbearia - Apenas para Owner */}
               {isOwner && (
                 <div className="space-y-2">
                   <Label htmlFor="barbershopName">Nome da Barbearia</Label>
@@ -517,7 +505,6 @@ const Settings = () => {
             </div>
           </div>
 
-          {/* Opção de Aceitar Agendamentos - Apenas para Owner */}
           {isOwner && (
             <div className="border-t border-border pt-6">
               <h2 className="text-2xl font-bold mb-6">Preferências de Agendamento</h2>
@@ -552,4 +539,4 @@ const Settings = () => {
   );
 };
 
-export default Settings;
+export default SettingsPage;
