@@ -278,7 +278,7 @@ const Dashboard = () => {
               </div>
               <p className="text-3xl font-bold">{totalHoje}</p>
             </div>
-
+          <a href="/dashboard/Finance">
             <div className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-muted-foreground text-sm">Receita do Dia</span>
@@ -286,6 +286,7 @@ const Dashboard = () => {
               </div>
               <p className="text-3xl font-bold">R${receitaHoje.toFixed(2)}</p>
             </div>
+            </a>
 
             <div className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all">
               <div className="flex items-center justify-between mb-2">

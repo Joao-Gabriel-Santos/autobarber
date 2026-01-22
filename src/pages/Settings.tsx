@@ -431,7 +431,7 @@ const SettingsPage = () => {
                       <input
                         id="bannerPosition"
                         type="range"
-                        min="0"
+                        min="10"
                         max="100"
                         value={bannerPosition}
                         onChange={(e) => setBannerPosition(Number(e.target.value))}
