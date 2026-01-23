@@ -139,6 +139,9 @@ export type Database = {
           updated_at: string
           slug: string
           owner_accepts_appointments: boolean
+          banner_position_x: number;
+          banner_position_y: number;
+          banner_zoom: number;
         }
         Insert: {
           barber_id: string
@@ -147,6 +150,9 @@ export type Database = {
           updated_at?: string
           slug?: string
           owner_accepts_appointments?: boolean
+          banner_position_x?: number;
+          banner_position_y?: number;
+          banner_zoom?: number;
         }
         Update: {
           barber_id?: string
@@ -155,6 +161,9 @@ export type Database = {
           updated_at?: string
           slug?: string
           owner_accepts_appointments?: boolean
+          banner_position_x?: number;
+          banner_position_y?: number;
+          banner_zoom?: number;
         }
         Relationships: []
       }

@@ -271,6 +271,7 @@ const Dashboard = () => {
         {/* Quick Stats - Apenas para Owner */}
         {isOwner && (
           <div className="grid md:grid-cols-3 gap-6 mb-8">
+            <a href="/dashboard/appointments">
             <div className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-muted-foreground text-sm">Agendamentos Hoje</span>
@@ -278,6 +279,7 @@ const Dashboard = () => {
               </div>
               <p className="text-3xl font-bold">{totalHoje}</p>
             </div>
+            </a>
           <a href="/dashboard/Finance">
             <div className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all">
               <div className="flex items-center justify-between mb-2">

@@ -5,13 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import { ArrowLeft, Settings, User, Image, Link, Info, CreditCard } from "lucide-react";
+import { ArrowLeft, Settings, User, Image, Link, Info, CreditCard, ZoomIn, ZoomOut, Move } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useSubscription } from "@/hooks/useSubscription";
 import { Badge } from "@/components/ui/badge";
 import { usePermissions } from "@/hooks/usePermissions";
+import { Slider } from "@/components/ui/slider";
 
 const SettingsPage = () => {
   const navigate = useNavigate();
@@ -22,7 +23,12 @@ const SettingsPage = () => {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [bannerPosition, setBannerPosition] = useState(50);
+  
+  // Estados para o editor de banner
+  const [bannerZoom, setBannerZoom] = useState(100);
+  const [bannerPositionX, setBannerPositionX] = useState(50);
+  const [bannerPositionY, setBannerPositionY] = useState(50);
+  
   const [formData, setFormData] = useState({
     barbershopName: "",
     fullName: "",
@@ -105,8 +111,15 @@ const SettingsPage = () => {
           ownerAcceptsAppointments: barbershop.owner_accepts_appointments ?? true,
         });
         
-        if (barbershop.banner_position !== null && barbershop.banner_position !== undefined) {
-          setBannerPosition(barbershop.banner_position);
+        // Carregar configurações do banner
+        if (barbershop.banner_zoom !== null && barbershop.banner_zoom !== undefined) {
+          setBannerZoom(barbershop.banner_zoom);
+        }
+        if (barbershop.banner_position_x !== null && barbershop.banner_position_x !== undefined) {
+          setBannerPositionX(barbershop.banner_position_x);
+        }
+        if (barbershop.banner_position_y !== null && barbershop.banner_position_y !== undefined) {
+          setBannerPositionY(barbershop.banner_position_y);
         }
       }
     } catch (error) {
@@ -174,6 +187,13 @@ const SettingsPage = () => {
           .eq("id", user.id);
       }
 
+      // Reset banner position when uploading new banner
+      if (type === 'banner') {
+        setBannerZoom(100);
+        setBannerPositionX(50);
+        setBannerPositionY(50);
+      }
+
       toast({
         title: "Imagem atualizada com sucesso!",
         description: "A nova imagem já está visível",
@@ -191,8 +211,42 @@ const SettingsPage = () => {
     }
   };
 
+  const normalizeSlug = (text: string): string => {
+    return text
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+  };
+
+  const handleBarbershopNameChange = (name: string) => {
+    setFormData(prev => ({
+      ...prev,
+      barbershopName: name,
+      slug: normalizeSlug(name)
+    }));
+  };
+
+  const handleSlugChange = (slug: string) => {
+    setFormData(prev => ({
+      ...prev,
+      slug: normalizeSlug(slug)
+    }));
+  };
+
   const handleSave = async () => {
     if (!user || !barbershopId) return;
+    
+    if (!formData.slug || formData.slug.trim() === '') {
+      toast({
+        title: "Slug inválido",
+        description: "O link personalizado não pode estar vazio",
+        variant: "destructive",
+      });
+      return;
+    }
     
     setSaving(true);
     
@@ -208,12 +262,32 @@ const SettingsPage = () => {
       if (profileError) throw profileError;
 
       if (isOwner) {
+        const { data: existingSlug } = await supabase
+          .from("barbershops")
+          .select("barber_id")
+          .eq("slug", formData.slug)
+          .neq("barber_id", barbershopId)
+          .maybeSingle();
+
+        if (existingSlug) {
+          toast({
+            title: "Link já em uso",
+            description: "Este link personalizado já está sendo usado por outra barbearia. Escolha outro.",
+            variant: "destructive",
+          });
+          setSaving(false);
+          return;
+        }
+
         const { error: barbershopError } = await supabase
           .from("barbershops")
           .update({
             barbershop_name: formData.barbershopName,
+            slug: formData.slug,
             owner_accepts_appointments: formData.ownerAcceptsAppointments,
-            banner_position: bannerPosition,
+            banner_zoom: bannerZoom,
+            banner_position_x: bannerPositionX,
+            banner_position_y: bannerPositionY,
           })
           .eq("barber_id", barbershopId);
 
@@ -352,24 +426,36 @@ const SettingsPage = () => {
               <Alert className="mb-4">
                 <Info className="h-4 w-4" />
                 <AlertDescription>
-                  O link é gerado automaticamente a partir do nome da sua barbearia. 
-                  Para alterá-lo, mude o nome da barbearia abaixo e salve.
+                  O link é gerado automaticamente quando você digita o nome da barbearia, 
+                  mas você pode editá-lo manualmente abaixo.
                 </AlertDescription>
               </Alert>
-              <div className="space-y-2">
-                <Label>Seu Link Único (Gerado Automaticamente)</Label>
-                <div className="flex items-center gap-2 bg-background border border-border rounded-md px-3 py-2">
-                  <span className="text-sm text-muted-foreground">
-                    {window.location.origin}/book/
-                  </span>
-                  <span className="text-sm font-medium text-primary">
-                    {formData.slug || "seu-link-aqui"}
-                  </span>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="slug">Seu Link Personalizado</Label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground whitespace-nowrap">
+                      {window.location.origin}/book/
+                    </span>
+                    <Input
+                      id="slug"
+                      value={formData.slug}
+                      onChange={(e) => handleSlugChange(e.target.value)}
+                      placeholder="minha-barbearia"
+                      className="bg-background font-medium text-primary"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    ✨ Use apenas letras minúsculas, números e hífens. 
+                    Exemplo: barbearia-do-ze, cortes-premium, barbershop-2025
+                  </p>
                 </div>
                 {formData.slug && (
-                  <p className="text-xs text-muted-foreground">
-                    ✨ Este link é atualizado automaticamente quando você muda o nome da barbearia
-                  </p>
+                  <div className="bg-primary/10 border border-primary/20 rounded-lg p-3">
+                    <p className="text-sm font-medium text-primary">
+                      🔗 Link completo: {window.location.origin}/book/{formData.slug}
+                    </p>
+                  </div>
                 )}
               </div>
             </div>
@@ -409,44 +495,135 @@ const SettingsPage = () => {
             <div className="border-t border-border pt-6">
               <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
                 <Image className="h-6 w-6 text-primary" />
-                Foto de Capa
+                Foto de Capa (Banner)
               </h2>
-              <div className="flex flex-col gap-4">
+              
+              <Alert className="mb-4">
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  Esta imagem será exibida no topo da página de agendamentos. 
+                  Use os controles abaixo para ajustar zoom e posição.
+                </AlertDescription>
+              </Alert>
+
+              <div className="flex flex-col gap-6">
                 {formData.bannerUrl ? (
-                  <div className="space-y-4">
-                    <div className="relative w-full h-32 rounded-lg border-2 border-primary overflow-hidden bg-muted">
-                      <img
-                        src={formData.bannerUrl}
-                        alt="Banner"
-                        className="w-full h-full object-cover"
-                        style={{
-                          objectPosition: `center ${bannerPosition}%`
-                        }}
-                      />
+                  <div className="space-y-6">
+                    {/* Preview Mobile */}
+                    <div>
+                      <Label className="text-sm mb-2 block">Preview Mobile (360x200px)</Label>
+                      <div className="relative w-full h-[200px] rounded-lg border-2 border-primary overflow-hidden bg-muted">
+                        <img
+                          src={formData.bannerUrl}
+                          alt="Banner Mobile"
+                          className="w-full h-full object-cover"
+                          style={{
+                            transform: `scale(${bannerZoom / 100})`,
+                            objectPosition: `${bannerPositionX}% ${bannerPositionY}%`,
+                          }}
+                        />
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="bannerPosition" className="text-sm">
-                        Ajustar Posição Vertical
-                      </Label>
-                      <input
-                        id="bannerPosition"
-                        type="range"
-                        min="10"
-                        max="100"
-                        value={bannerPosition}
-                        onChange={(e) => setBannerPosition(Number(e.target.value))}
-                        className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
-                      />
-                      <p className="text-xs text-muted-foreground text-center">
-                        Arraste para reposicionar a imagem
-                      </p>
+
+                    {/* Preview Desktop */}
+                    <div>
+                      <Label className="text-sm mb-2 block">Preview Desktop (1200x300px)</Label>
+                      <div className="relative w-full h-[150px] md:h-[200px] rounded-lg border-2 border-primary overflow-hidden bg-muted">
+                        <img
+                          src={formData.bannerUrl}
+                          alt="Banner Desktop"
+                          className="w-full h-full object-cover"
+                          style={{
+                            transform: `scale(${bannerZoom / 100})`,
+                            objectPosition: `${bannerPositionX}% ${bannerPositionY}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Controles de Ajuste */}
+                    <div className="space-y-6 bg-muted/50 p-6 rounded-lg border border-border">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="flex items-center gap-2">
+                            <ZoomIn className="h-4 w-4" />
+                            Zoom: {bannerZoom}%
+                          </Label>
+                        </div>
+                        <Slider
+                          value={[bannerZoom]}
+                          onValueChange={(value) => setBannerZoom(value[0])}
+                          min={50}
+                          max={200}
+                          step={5}
+                          className="w-full"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Aumente ou diminua o zoom da imagem
+                        </p>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="flex items-center gap-2">
+                            <Move className="h-4 w-4" />
+                            Posição Horizontal: {bannerPositionX}%
+                          </Label>
+                        </div>
+                        <Slider
+                          value={[bannerPositionX]}
+                          onValueChange={(value) => setBannerPositionX(value[0])}
+                          min={0}
+                          max={100}
+                          step={1}
+                          className="w-full"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Mova a imagem para esquerda ou direita
+                        </p>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="flex items-center gap-2">
+                            <Move className="h-4 w-4 rotate-90" />
+                            Posição Vertical: {bannerPositionY}%
+                          </Label>
+                        </div>
+                        <Slider
+                          value={[bannerPositionY]}
+                          onValueChange={(value) => setBannerPositionY(value[0])}
+                          min={0}
+                          max={100}
+                          step={1}
+                          className="w-full"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Mova a imagem para cima ou para baixo
+                        </p>
+                      </div>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setBannerZoom(100);
+                          setBannerPositionX(50);
+                          setBannerPositionY(50);
+                        }}
+                        className="w-full"
+                      >
+                        Resetar Posição
+                      </Button>
                     </div>
                   </div>
                 ) : (
-                  <div className="w-full h-32 bg-muted flex items-center justify-center rounded-lg border-2 border-border">
-                    <Image className="h-12 w-12 text-muted-foreground" />
+                  <div className="w-full h-48 bg-muted flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-border">
+                    <Image className="h-16 w-16 text-muted-foreground mb-4" />
+                    <p className="text-sm text-muted-foreground">Nenhum banner carregado</p>
                   </div>
                 )}
+                
                 <div className="flex flex-col gap-2">
                   <Input
                     type="file"
@@ -456,7 +633,7 @@ const SettingsPage = () => {
                     className="cursor-pointer"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Foto do ambiente da barbearia
+                    📸 Recomendado: Imagem com pelo menos 1920x600px para melhor qualidade
                   </p>
                 </div>
               </div>
@@ -472,11 +649,11 @@ const SettingsPage = () => {
                   <Input
                     id="barbershopName"
                     value={formData.barbershopName}
-                    onChange={(e) => setFormData(prev => ({ ...prev, barbershopName: e.target.value }))}
+                    onChange={(e) => handleBarbershopNameChange(e.target.value)}
                     className="bg-background"
                   />
                   <p className="text-xs text-muted-foreground">
-                    💡 Mudar o nome atualiza automaticamente seu link personalizado
+                    💡 Ao mudar o nome, o link é atualizado automaticamente, mas você pode editá-lo depois
                   </p>
                 </div>
               )}

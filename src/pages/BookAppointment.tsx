@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
+import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { parsePhoneNumberFromString, CountryCode } from 'libphonenumber-js';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -416,18 +416,25 @@ const BookAppointment = () => {
     }
   };
 
+  // FUNÇÃO ATUALIZADA: Limita o calendário a 8 dias
   const disabledDays = (date: Date) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    // Data máxima: hoje + 7 dias (total de 8 dias incluindo hoje)
+    const maxDate = addDays(today, 7);
+    maxDate.setHours(23, 59, 59, 999);
+
+    // Desabilita se for antes de hoje OU depois de 8 dias
     const isPast = date < today;
+    const isTooFarInFuture = date > maxDate;
     
-    if (!selectedBarber) return isPast;
+    if (!selectedBarber) return isPast || isTooFarInFuture;
     
     const dayOfWeek = date.getDay();
     const barberWorksThisDay = workingHours.some(wh => wh.day_of_week === dayOfWeek);
 
-    return isPast || !barberWorksThisDay;
+    return isPast || isTooFarInFuture || !barberWorksThisDay;
   };
 
   if (loading) {
@@ -503,7 +510,7 @@ const BookAppointment = () => {
         <div className="grid lg:grid-cols-2 gap-8">
           {/* Services and Barber Selection */}
           <div className="space-y-6">
-            {/* Barber Selection - CORRIGIDO PARA MOBILE */}
+            {/* Barber Selection */}
             {showBarberSelector && (
             <div>
               <h2 className="text-2xl font-bold mb-4">Escolha o Barbeiro</h2>
@@ -594,7 +601,7 @@ const BookAppointment = () => {
               )}
 
               <div>
-                <Label>Data</Label>
+                <Label>Data (próximos 8 dias)</Label>
                 <Calendar
                   mode="single"
                   selected={selectedDate}
