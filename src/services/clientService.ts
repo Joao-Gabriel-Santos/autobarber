@@ -112,8 +112,9 @@ export class ClientService {
         .select(`
           service_id,
           barber_id,
-          services (name),
-          profiles:barber_id (full_name)
+          services!inner (
+            name
+          )
         `)
         .eq("client_whatsapp", whatsapp)
         .eq("status", "completed")
@@ -124,11 +125,18 @@ export class ClientService {
 
       if (!data) return null;
 
+      // Buscar nome do barbeiro separadamente
+      const { data: barberProfile } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", data.barber_id)
+        .single();
+
       return {
         service_id: data.service_id,
         service_name: (data.services as any)?.name || "Serviço",
         barber_id: data.barber_id,
-        barber_name: (data.profiles as any)?.full_name || "Barbeiro",
+        barber_name: barberProfile?.full_name || "Barbeiro",
       };
     } catch (error) {
       console.error("Error getting last service:", error);

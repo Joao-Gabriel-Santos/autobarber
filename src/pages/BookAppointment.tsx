@@ -52,6 +52,13 @@ interface BarbershopData {
   whatsapp_number: string | null;
 }
 
+interface LastServiceData {
+  service_id: string;
+  service_name: string;
+  barber_id: string;
+  barber_name: string;
+}
+
 const BookAppointment = () => {
   const { barberSlug } = useParams();
   const navigate = useNavigate();

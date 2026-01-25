@@ -95,12 +95,12 @@ const Appointments = () => {
     return new Date(year, month - 1, day);
   }
 
-  const handleWhatsAppClick = (whatsappNumber: string, clientName: string) => {
+  const handleWhatsAppClick = (whatsappNumber: string, clientName: string, appointment_date: string, appointment_time: string) => {
     // Remove caracteres não numéricos do número
     const cleanNumber = whatsappNumber.replace(/\D/g, '');
     
     // Cria a mensagem padrão personalizada
-    const message = encodeURIComponent(`Olá ${clientName}! Aqui é da barbearia. Como posso ajudar?`);
+    const message = encodeURIComponent(`Olá, ${clientName} tudo bem? </br> Aqui é da barbearia ${barber_id}. </br> Passando só para confirmar seu agendamento para ${appointment_date} às ${appointment_time}. </br> Qualquer imprevisto é só avisar. Obrigado!`);
     
     // Cria o link do WhatsApp
     const whatsappUrl = `https://wa.me/${cleanNumber}?text=${message}`;
