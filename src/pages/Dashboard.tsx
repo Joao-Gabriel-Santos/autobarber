@@ -10,6 +10,7 @@ import WalkInAppointment from "@/components/WalkInAppointment";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useSubscription } from "@/hooks/useSubscription";
 import { SubscriptionGate } from "@/components/SubscriptionGate";
+import {Users as UsersIcon } from "lucide-react";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -438,6 +439,22 @@ const Dashboard = () => {
               </p>
             </div>
           )}
+
+          {isOwner && (
+            <div
+              className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
+              onClick={() => navigate("/dashboard/clients")}
+            >
+              <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <UsersIcon className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="font-bold text-xl mb-2">Clientes</h3>
+              <p className="text-muted-foreground text-sm">
+                Visualize e gerencie sua base de clientes com métricas de fidelidade
+              </p>
+            </div>
+          )}
+
 
           {/* EQUIPE - Apenas Owner Master */}
           {isOwner && hasFeature('team_management') ? (

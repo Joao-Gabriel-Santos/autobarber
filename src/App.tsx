@@ -1,8 +1,12 @@
+// src/App.tsx - ATUALIZADO COM ROTAS DE CLIENTES
+
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+
+// Páginas existentes
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
@@ -22,6 +26,9 @@ import PaymentSuccess from "./pages/PaymentSuccess";
 import TeamManagement from "./pages/dashboard/TeamManagement";
 import AcceptInvite from "./pages/dashboard/AcceptInvite";
 
+// ✨ NOVAS PÁGINAS DE CLIENTES
+import ClientsManagement from "./pages/dashboard/Clients";
+import ClientDashboard from "./pages/ClientDashboard";
 
 const queryClient = new QueryClient();
 
@@ -32,24 +39,37 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
+          {/* Rotas públicas */}
           <Route path="/" element={<Index />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/payment-success" element={<PaymentSuccess />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/confirm-email" element={<ConfirmEmail />} />
+          <Route path="/update-password" element={<UpdatePassword />} />
+          
+          {/* Agendamento público */}
+          <Route path="/book/:barberSlug" element={<BookAppointment />} />
+          <Route path="/meus-agendamentos" element={<ClientAppointments />} />
+          
+          {/* ✨ Dashboard do Cliente (área logada) */}
+          <Route path="/client-dashboard" element={<ClientDashboard />} />
+          
+          {/* Dashboard do Owner/Barbeiro */}
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/services" element={<Services />} />
           <Route path="/dashboard/schedule" element={<Schedule />} />
           <Route path="/dashboard/appointments" element={<Appointments />} />
           <Route path="/dashboard/finance" element={<Finance />} />
+          <Route path="/dashboard/team" element={<TeamManagement />} />
+          
+          {/* ✨ Gestão de Clientes (Owner apenas) */}
+          <Route path="/dashboard/clients" element={<ClientsManagement />} />
+          
           <Route path="/settings" element={<Settings />} />
-          <Route path="/book/:barberSlug" element={<BookAppointment />} />
-          <Route path="/meus-agendamentos" element={<ClientAppointments />} />
-          <Route path="/update-password" element={<UpdatePassword />} />
           <Route path="/accept-invite/:token" element={<AcceptInvite />}/>
-          <Route path="/dashboard/team" element={<TeamManagement />}/>
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/confirm-email" element={<ConfirmEmail />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          
+          {/* Catch-all 404 */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

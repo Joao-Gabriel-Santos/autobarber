@@ -1,17 +1,19 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { parsePhoneNumberFromString, CountryCode } from 'libphonenumber-js';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { MessageCircle } from "lucide-react";
+import { ClientService, WhatsAppService } from "@/services/clientService";
+import { Repeat, MessageCircle } from "lucide-react";
 
 interface Service {
   id: string;
@@ -52,21 +54,30 @@ interface BarbershopData {
 
 const BookAppointment = () => {
   const { barberSlug } = useParams();
+  const navigate = useNavigate();
   const { toast } = useToast();
+  
   const [loading, setLoading] = useState(true);
   const [services, setServices] = useState<Service[]>([]);
   const [barbers, setBarbers] = useState<Barber[]>([]);
   const [workingHours, setWorkingHours] = useState<WorkingHour[]>([]);
   const [breaks, setBreaks] = useState<Break[]>([]);
+  
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedBarber, setSelectedBarber] = useState<Barber | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>();
   const [selectedTime, setSelectedTime] = useState<string>("");
   const [availableTimes, setAvailableTimes] = useState<string[]>([]);
+  
   const [clientName, setClientName] = useState("");
   const [clientWhatsapp, setClientWhatsapp] = useState("");
+  const [clientBirthday, setClientBirthday] = useState("");
+  
   const [barbershopInfo, setBarbershopInfo] = useState<BarbershopData | null>(null);
   const [ownerId, setOwnerId] = useState<string>("");
+  
+  const [isReturningClient, setIsReturningClient] = useState(false);
+  const [lastService, setLastService] = useState<any>(null);
 
   useEffect(() => {
     loadBarbershopData();
@@ -77,23 +88,6 @@ const BookAppointment = () => {
       generateAvailableTimes();
     }
   }, [selectedDate, selectedService, selectedBarber]);
-
-  function validateAndNormalize(phone: string) {
-    const defaultCountry = 'BR' as CountryCode
-    const phoneNumber = parsePhoneNumberFromString(phone, defaultCountry);
-    if (!phoneNumber) return { valid: false, reason: 'invalid_format' };
-
-    const isPossible = phoneNumber.isPossible();
-    const isValid = phoneNumber.isValid();
-    const e164 = phoneNumber.number;
-
-    return {
-      valid: isPossible && isValid,
-      e164,
-      country: phoneNumber.country,
-      nationalNumber: phoneNumber.nationalNumber,
-    };
-  }
 
   const handleWhatsAppClick = () => {
     if (!barbershopInfo?.whatsapp_number) {
@@ -117,6 +111,23 @@ const BookAppointment = () => {
     // Abre em nova aba
     window.open(whatsappUrl, '_blank');
   };
+
+  function validateAndNormalize(phone: string) {
+    const defaultCountry = 'BR' as CountryCode;
+    const phoneNumber = parsePhoneNumberFromString(phone, defaultCountry);
+    if (!phoneNumber) return { valid: false, reason: 'invalid_format' };
+
+    const isPossible = phoneNumber.isPossible();
+    const isValid = phoneNumber.isValid();
+    const e164 = phoneNumber.number;
+
+    return {
+      valid: isPossible && isValid,
+      e164,
+      country: phoneNumber.country,
+      nationalNumber: phoneNumber.nationalNumber,
+    };
+  }
 
   const loadBarbershopData = async () => {
     if (!barberSlug) {
@@ -187,7 +198,6 @@ const BookAppointment = () => {
         whatsapp_number: barbershopData.whatsapp
       });
 
-      // Load services (do owner)
       const { data: servicesData, error: servicesError } = await supabase
         .from("services")
         .select("*")
@@ -197,10 +207,8 @@ const BookAppointment = () => {
       if (servicesError) throw servicesError;
       setServices(servicesData || []);
 
-      // Load barbers (team members + owner se aceita agendamentos)
       const barbersList: Barber[] = [];
       
-      // Adicionar owner se aceita agendamentos
       if (barbershopData.owner_accepts_appointments) {
         const { data: ownerProfile } = await supabase
           .from("profiles")
@@ -217,7 +225,6 @@ const BookAppointment = () => {
         }
       }
 
-      // Adicionar barbeiros da equipe
       const { data: teamMembers } = await supabase
         .from("profiles")
         .select("id, full_name, avatar_url")
@@ -234,7 +241,7 @@ const BookAppointment = () => {
 
       setBarbers(barbersList);
 
-    if (barbersList.length === 1) {
+      if (barbersList.length === 1) {
         setSelectedBarber(barbersList[0]);
       }
 
@@ -387,6 +394,46 @@ const BookAppointment = () => {
     return times;
   };
 
+  // ✨ VERIFICAR SE É CLIENTE RECORRENTE
+  const checkReturningClient = async (whatsapp: string) => {
+    if (!ownerId || !whatsapp) return;
+    
+    const phoneCheck = validateAndNormalize(whatsapp);
+    if (!phoneCheck.valid) return;
+
+    const lastSvc = await ClientService.getLastService(phoneCheck.e164, ownerId);
+    
+    if (lastSvc) {
+      setIsReturningClient(true);
+      setLastService(lastSvc);
+      
+      toast({
+        title: "Bem-vindo de volta! 👋",
+        description: "Encontramos seu histórico. Use o botão 'O de Sempre' para agilizar.",
+      });
+    } else {
+      setIsReturningClient(false);
+      setLastService(null);
+    }
+  };
+
+  // ✨ USAR ÚLTIMO SERVIÇO
+  const useLastService = () => {
+    if (!lastService) return;
+    
+    const service = services.find(s => s.id === lastService.service_id);
+    const barber = barbers.find(b => b.id === lastService.barber_id);
+    
+    if (service) setSelectedService(service);
+    if (barber) setSelectedBarber(barber);
+    
+    toast({
+      title: "Serviço selecionado!",
+      description: `${lastService.service_name} com ${lastService.barber_name}`,
+    });
+  };
+
+  // ✨ AGENDAMENTO COM CADASTRO INVISÍVEL
   const handleBooking = async () => {
     if (!selectedService || !selectedDate || !selectedTime || !clientName || !clientWhatsapp || !selectedBarber) {
       toast({
@@ -408,9 +455,26 @@ const BookAppointment = () => {
     const normalizedWhatsapp = phoneCheck.e164;
 
     try {
-      const { error } = await supabase
+      // ============================================
+      // ETAPA 1: CADASTRO INVISÍVEL DO CLIENTE
+      // ============================================
+      const client = await ClientService.upsertClient(
+        ownerId,
+        normalizedWhatsapp,
+        clientName,
+        clientBirthday || undefined
+      );
+
+      if (!client) {
+        throw new Error("Erro ao registrar cliente");
+      }
+
+      // ============================================
+      // ETAPA 2: CRIAR AGENDAMENTO
+      // ============================================
+      const { data: appointment, error } = await supabase
         .from("appointments")
-        .insert([{
+        .insert({
           barber_id: selectedBarber.id,
           service_id: selectedService.id,
           appointment_date: format(selectedDate, "yyyy-MM-dd"),
@@ -419,13 +483,29 @@ const BookAppointment = () => {
           client_whatsapp: normalizedWhatsapp,
           price: selectedService.price,
           status: "confirmed",
-        }]);
+          client_id: client.id,
+        })
+        .select()
+        .single();
 
       if (error) throw error;
 
+      // ============================================
+      // ETAPA 3: ENVIAR CONFIRMAÇÃO VIA WHATSAPP
+      // ============================================
+      await WhatsAppService.sendAppointmentConfirmation(
+        normalizedWhatsapp,
+        {
+          service: selectedService.name,
+          date: format(selectedDate, "dd/MM/yyyy", { locale: ptBR }),
+          time: selectedTime,
+          barber: selectedBarber.full_name,
+        }
+      );
+
       toast({
-        title: "✅ Agendamento realizado!",
-        description: "Seu horário foi confirmado com sucesso.",
+        title: "✅ Agendamento confirmado!",
+        description: `${clientName}, seu horário foi confirmado. Você receberá uma confirmação no WhatsApp.`,
       });
 
       setSelectedService(null);
@@ -434,6 +514,14 @@ const BookAppointment = () => {
       setSelectedTime("");
       setClientName("");
       setClientWhatsapp("");
+
+      // Redirecionar para dashboard do cliente
+      const dashboardUrl = `/client-dashboard?whatsapp=${encodeURIComponent(normalizedWhatsapp)}&barbershop_id=${ownerId}&barbershop_slug=${barberSlug}`;
+      
+      setTimeout(() => {
+        window.location.href = dashboardUrl;
+      }, 2000);
+
     } catch (error: any) {
       toast({
         title: "Erro ao agendar",
@@ -443,16 +531,13 @@ const BookAppointment = () => {
     }
   };
 
-  // FUNÇÃO ATUALIZADA: Limita o calendário a 8 dias
   const disabledDays = (date: Date) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Data máxima: hoje + 7 dias (total de 8 dias incluindo hoje)
     const maxDate = addDays(today, 7);
     maxDate.setHours(23, 59, 59, 999);
 
-    // Desabilita se for antes de hoje OU depois de 8 dias
     const isPast = date < today;
     const isTooFarInFuture = date > maxDate;
     
@@ -551,36 +636,37 @@ const BookAppointment = () => {
           <div className="space-y-6">
             {/* Barber Selection */}
             {showBarberSelector && (
-            <div>
-              <h2 className="text-2xl font-bold mb-4">Escolha o Barbeiro</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {barbers.map((barber) => (
-                  <Card
-                    key={barber.id}
-                    className={`p-4 cursor-pointer transition-all border-2 ${
-                      selectedBarber?.id === barber.id
-                        ? "border-primary bg-primary/5"
-                        : "border-border bg-card hover:border-primary/50"
-                    }`}
-                    onClick={() => setSelectedBarber(barber)}
-                  >
-                    <div className="flex flex-col items-center gap-3">
-                      <Avatar className="h-20 w-20">
-                        {barber.avatar_url ? (
-                          <AvatarImage src={barber.avatar_url} alt={barber.full_name} />
-                        ) : (
-                          <AvatarFallback className="bg-gradient-gold text-primary-foreground text-xl">
-                            {barber.full_name.charAt(0)}
-                          </AvatarFallback>
-                        )}
-                      </Avatar>
-                      <h3 className="font-bold text-center">{barber.full_name}</h3>
-                    </div>
-                  </Card>
-                ))}
+              <div>
+                <h2 className="text-2xl font-bold mb-4">Escolha o Barbeiro</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {barbers.map((barber) => (
+                    <Card
+                      key={barber.id}
+                      className={`p-4 cursor-pointer transition-all border-2 ${
+                        selectedBarber?.id === barber.id
+                          ? "border-primary bg-primary/5"
+                          : "border-border bg-card hover:border-primary/50"
+                      }`}
+                      onClick={() => setSelectedBarber(barber)}
+                    >
+                      <div className="flex flex-col items-center gap-3">
+                        <Avatar className="h-20 w-20">
+                          {barber.avatar_url ? (
+                            <AvatarImage src={barber.avatar_url} alt={barber.full_name} />
+                          ) : (
+                            <AvatarFallback className="bg-gradient-gold text-primary-foreground text-xl">
+                              {barber.full_name.charAt(0)}
+                            </AvatarFallback>
+                          )}
+                        </Avatar>
+                        <h3 className="font-bold text-center">{barber.full_name}</h3>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
               </div>
-            </div>
             )}
+
             {/* Service Selection */}
             <div>
               <h2 className="text-2xl font-bold mb-4">Escolha o Serviço</h2>
@@ -639,6 +725,23 @@ const BookAppointment = () => {
                 </div>
               )}
 
+              {/* ✨ Botão "O de Sempre" */}
+              {isReturningClient && lastService && (
+                <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
+                  <Button
+                    onClick={useLastService}
+                    className="w-full shadow-gold"
+                    size="lg"
+                  >
+                    <Repeat className="h-5 w-5 mr-2" />
+                    O de Sempre
+                    <span className="ml-2 text-sm opacity-80">
+                      ({lastService.service_name})
+                    </span>
+                  </Button>
+                </div>
+              )}
+
               <div>
                 <Label>Data (próximos 8 dias)</Label>
                 <Calendar
@@ -678,7 +781,7 @@ const BookAppointment = () => {
               )}
 
               <div>
-                <Label htmlFor="name">Seu Nome</Label>
+                <Label htmlFor="name">Seu Nome *</Label>
                 <Input
                   id="name"
                   value={clientName}
@@ -688,13 +791,30 @@ const BookAppointment = () => {
               </div>
               
               <div>
-                <Label htmlFor="whatsapp">WhatsApp</Label>
+                <Label htmlFor="whatsapp">WhatsApp *</Label>
                 <Input
                   id="whatsapp"
                   value={clientWhatsapp}
                   onChange={(e) => setClientWhatsapp(e.target.value)}
+                  onBlur={(e) => checkReturningClient(e.target.value)}
                   placeholder="(00) 00000-0000"
                 />
+              </div>
+
+              {/* ✨ Data de Nascimento */}
+              <div>
+                <Label htmlFor="birthday" className="flex items-center gap-2">
+                  Data de Nascimento *
+                </Label>
+                <Input
+                  id="birthday"
+                  type="date"
+                  value={clientBirthday}
+                  onChange={(e) => setClientBirthday(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  💡 Informe para ganhar descontos especiais!
+                </p>
               </div>
 
               <Button

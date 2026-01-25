@@ -13,6 +13,46 @@ export type Database = {
   
   public: {
     Tables: {
+      clients: {
+        Row: {
+          id: string
+          barbershop_id: string
+          nome: string
+          whatsapp: string
+          data_nascimento: string //
+          total_cortes: string //
+          data_ultimo_corte: string //
+          auth_user_id: string
+          created_at: string 
+          updated_at: string
+
+        }
+        Insert: {
+          id?: string
+          barbershop_id?: string
+          nome?: string
+          whatsapp?: string
+          data_nascimento?: string //
+          total_cortes?: string //
+          data_ultimo_corte?: string //
+          auth_user_id?: string
+          created_at?: string 
+          updated_at?: string
+        }
+        Uptade: {
+          id?: string
+          barbershop_id?: string
+          nome?: string
+          whatsapp?: string
+          data_nascimento?: string //
+          total_cortes?: string //
+          data_ultimo_corte?: string //
+          auth_user_id?: string
+          created_at?: string 
+          updated_at?: string
+        }
+        Relationships: []
+      }
       barber_invites: {
         Row: {
           id: string
