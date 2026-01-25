@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Calendar, Clock, User, Phone } from "lucide-react";
+import { ArrowLeft, Calendar, Clock, User, Phone, MessageCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -95,6 +95,20 @@ const Appointments = () => {
     return new Date(year, month - 1, day);
   }
 
+  const handleWhatsAppClick = (whatsappNumber: string, clientName: string) => {
+    // Remove caracteres não numéricos do número
+    const cleanNumber = whatsappNumber.replace(/\D/g, '');
+    
+    // Cria a mensagem padrão personalizada
+    const message = encodeURIComponent(`Olá ${clientName}! Aqui é da barbearia. Como posso ajudar?`);
+    
+    // Cria o link do WhatsApp
+    const whatsappUrl = `https://wa.me/${cleanNumber}?text=${message}`;
+    
+    // Abre em nova aba
+    window.open(whatsappUrl, '_blank');
+  };
+
   const updateStatus = async (id: string, status: string) => {
     try {
       const { error } = await supabase
@@ -147,9 +161,15 @@ const Appointments = () => {
           <User className="h-4 w-4" />
           <span>{appointment.client_name}</span>
         </div>
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Phone className="h-4 w-4" />
-          <span>{appointment.client_whatsapp}</span>
+        <div className="flex items-center gap-2">
+          <Phone className="h-4 w-4 text-muted-foreground" />
+          <button
+            onClick={() => handleWhatsAppClick(appointment.client_whatsapp, appointment.client_name)}
+            className="text-[#25D366] hover:text-[#20BA5A] hover:underline font-medium transition-colors flex items-center gap-1 group"
+          >
+            <span>{appointment.client_whatsapp}</span>
+            <MessageCircle className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          </button>
         </div>
         <div className="flex items-center gap-2 text-muted-foreground">
           <Calendar className="h-4 w-4" />

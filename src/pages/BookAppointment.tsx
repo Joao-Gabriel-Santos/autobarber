@@ -11,6 +11,7 @@ import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { parsePhoneNumberFromString, CountryCode } from 'libphonenumber-js';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { MessageCircle } from "lucide-react";
 
 interface Service {
   id: string;
@@ -46,6 +47,7 @@ interface BarbershopData {
   avatar_url: string | null;
   banner_url: string | null;
   owner_accepts_appointments: boolean;
+  whatsapp_number: string | null;
 }
 
 const BookAppointment = () => {
@@ -93,6 +95,29 @@ const BookAppointment = () => {
     };
   }
 
+  const handleWhatsAppClick = () => {
+    if (!barbershopInfo?.whatsapp_number) {
+      toast({
+        title: "WhatsApp não disponível",
+        description: "Esta barbearia ainda não configurou o WhatsApp.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Remove caracteres não numéricos do número
+    const cleanNumber = barbershopInfo.whatsapp_number.replace(/\D/g, '');
+    
+    // Cria a mensagem padrão
+    const message = encodeURIComponent(`Olá! Gostaria de mais informações sobre os serviços da ${barbershopInfo.name}.`);
+    
+    // Cria o link do WhatsApp
+    const whatsappUrl = `https://wa.me/${cleanNumber}?text=${message}`;
+    
+    // Abre em nova aba
+    window.open(whatsappUrl, '_blank');
+  };
+
   const loadBarbershopData = async () => {
     if (!barberSlug) {
       console.log("No barberSlug provided");
@@ -122,7 +147,7 @@ const BookAppointment = () => {
 
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("full_name")
+        .select("full_name, whatsapp")
         .eq("id", directData.barber_id)
         .maybeSingle();
       
@@ -135,7 +160,8 @@ const BookAppointment = () => {
         barbershop_name: directData.barbershop_name,
         full_name: profile?.full_name || null,
         slug: directData.slug,
-        owner_accepts_appointments: directData.owner_accepts_appointments || false
+        owner_accepts_appointments: directData.owner_accepts_appointments || false,
+        whatsapp: profile?.whatsapp || null
       };
       
       setOwnerId(barbershopData.barber_id);
@@ -157,7 +183,8 @@ const BookAppointment = () => {
         slug: barbershopData.slug,
         avatar_url: avatarUrl,
         banner_url: bannerUrl,
-        owner_accepts_appointments: barbershopData.owner_accepts_appointments
+        owner_accepts_appointments: barbershopData.owner_accepts_appointments,
+        whatsapp_number: barbershopData.whatsapp
       });
 
       // Load services (do owner)
@@ -496,13 +523,25 @@ const BookAppointment = () => {
           <p className="text-muted-foreground mb-4">
             Faça seu agendamento
           </p>
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => window.location.href = "/meus-agendamentos"}
-          >
-            Ver Meus Agendamentos
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => window.location.href = "/meus-agendamentos"}
+            >
+              Ver Meus Agendamentos
+            </Button>
+            {barbershopInfo.whatsapp_number && (
+              <Button 
+                size="sm"
+                onClick={handleWhatsAppClick}
+                className="bg-[#089311] hover:bg-[#20BA5A] text-white"
+              >
+                <MessageCircle className="h-4 w-4 mr-2" />
+                Falar no WhatsApp
+              </Button>
+            )}
+          </div>
         </div>
       </header>
 

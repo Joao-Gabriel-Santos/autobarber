@@ -13,6 +13,7 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { Badge } from "@/components/ui/badge";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Slider } from "@/components/ui/slider";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 const SettingsPage = () => {
   const navigate = useNavigate();
@@ -513,13 +514,13 @@ const SettingsPage = () => {
                     <div>
                       <Label className="text-sm mb-2 block">Preview Mobile (360x200px)</Label>
                       <div className="relative w-full h-[200px] rounded-lg border-2 border-primary overflow-hidden bg-muted">
-                        <img
-                          src={formData.bannerUrl}
-                          alt="Banner Mobile"
-                          className="w-full h-full object-cover"
+                        <div
+                          className="w-full h-full"
                           style={{
-                            transform: `scale(${bannerZoom / 100})`,
-                            objectPosition: `${bannerPositionX}% ${bannerPositionY}%`,
+                            backgroundImage: `url(${formData.bannerUrl})`,
+                            backgroundSize: `${bannerZoom}%`,
+                            backgroundPosition: `${bannerPositionX}% ${bannerPositionY}%`,
+                            backgroundRepeat: 'no-repeat',
                           }}
                         />
                       </div>
@@ -529,93 +530,105 @@ const SettingsPage = () => {
                     <div>
                       <Label className="text-sm mb-2 block">Preview Desktop (1200x300px)</Label>
                       <div className="relative w-full h-[150px] md:h-[200px] rounded-lg border-2 border-primary overflow-hidden bg-muted">
-                        <img
-                          src={formData.bannerUrl}
-                          alt="Banner Desktop"
-                          className="w-full h-full object-cover"
+                        <div
+                          className="w-full h-full"
                           style={{
-                            transform: `scale(${bannerZoom / 100})`,
-                            objectPosition: `${bannerPositionX}% ${bannerPositionY}%`,
+                            backgroundImage: `url(${formData.bannerUrl})`,
+                            backgroundSize: `${bannerZoom}%`,
+                            backgroundPosition: `${bannerPositionX}% ${bannerPositionY}%`,
+                            backgroundRepeat: 'no-repeat',
                           }}
                         />
                       </div>
                     </div>
 
-                    {/* Controles de Ajuste */}
-                    <div className="space-y-6 bg-muted/50 p-6 rounded-lg border border-border">
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <Label className="flex items-center gap-2">
-                            <ZoomIn className="h-4 w-4" />
-                            Zoom: {bannerZoom}%
-                          </Label>
-                        </div>
-                        <Slider
-                          value={[bannerZoom]}
-                          onValueChange={(value) => setBannerZoom(value[0])}
-                          min={50}
-                          max={200}
-                          step={5}
-                          className="w-full"
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Aumente ou diminua o zoom da imagem
-                        </p>
-                      </div>
-
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <Label className="flex items-center gap-2">
+                    {/* Controles de Ajuste - Accordion */}
+                    <Accordion type="single" collapsible className="w-full">
+                      <AccordionItem value="banner-adjustments" className="border border-border rounded-lg bg-muted/50">
+                        <AccordionTrigger className="px-6 hover:no-underline">
+                          <span className="flex items-center gap-2 font-semibold">
                             <Move className="h-4 w-4" />
-                            Posição Horizontal: {bannerPositionX}%
-                          </Label>
-                        </div>
-                        <Slider
-                          value={[bannerPositionX]}
-                          onValueChange={(value) => setBannerPositionX(value[0])}
-                          min={0}
-                          max={100}
-                          step={1}
-                          className="w-full"
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Mova a imagem para esquerda ou direita
-                        </p>
-                      </div>
+                            Ajustes do Banner
+                          </span>
+                        </AccordionTrigger>
+                        <AccordionContent className="px-6 pb-6">
+                          <div className="space-y-6 pt-2">
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <Label className="flex items-center gap-2">
+                                  <ZoomIn className="h-4 w-4" />
+                                  Zoom: {bannerZoom}%
+                                </Label>
+                              </div>
+                              <Slider
+                                value={[bannerZoom]}
+                                onValueChange={(value) => setBannerZoom(value[0])}
+                                min={50}
+                                max={200}
+                                step={5}
+                                className="w-full"
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                Aumente ou diminua o zoom da imagem
+                              </p>
+                            </div>
 
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <Label className="flex items-center gap-2">
-                            <Move className="h-4 w-4 rotate-90" />
-                            Posição Vertical: {bannerPositionY}%
-                          </Label>
-                        </div>
-                        <Slider
-                          value={[bannerPositionY]}
-                          onValueChange={(value) => setBannerPositionY(value[0])}
-                          min={0}
-                          max={100}
-                          step={1}
-                          className="w-full"
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Mova a imagem para cima ou para baixo
-                        </p>
-                      </div>
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <Label className="flex items-center gap-2">
+                                  <Move className="h-4 w-4" />
+                                  Posição Horizontal: {bannerPositionX}%
+                                </Label>
+                              </div>
+                              <Slider
+                                value={[bannerPositionX]}
+                                onValueChange={(value) => setBannerPositionX(value[0])}
+                                min={0}
+                                max={100}
+                                step={1}
+                                className="w-full"
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                Mova a imagem para esquerda ou direita
+                              </p>
+                            </div>
 
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setBannerZoom(100);
-                          setBannerPositionX(50);
-                          setBannerPositionY(50);
-                        }}
-                        className="w-full"
-                      >
-                        Resetar Posição
-                      </Button>
-                    </div>
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <Label className="flex items-center gap-2">
+                                  <Move className="h-4 w-4 rotate-90" />
+                                  Posição Vertical: {bannerPositionY}%
+                                </Label>
+                              </div>
+                              <Slider
+                                value={[bannerPositionY]}
+                                onValueChange={(value) => setBannerPositionY(value[0])}
+                                min={0}
+                                max={100}
+                                step={1}
+                                className="w-full"
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                Mova a imagem para cima ou para baixo
+                              </p>
+                            </div>
+
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setBannerZoom(100);
+                                setBannerPositionX(50);
+                                setBannerPositionY(50);
+                              }}
+                              className="w-full"
+                            >
+                              Resetar Posição
+                            </Button>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
                   </div>
                 ) : (
                   <div className="w-full h-48 bg-muted flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-border">
