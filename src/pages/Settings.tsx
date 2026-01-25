@@ -526,22 +526,6 @@ const SettingsPage = () => {
                       </div>
                     </div>
 
-                    {/* Preview Desktop */}
-                    <div>
-                      <Label className="text-sm mb-2 block">Preview Desktop (1200x300px)</Label>
-                      <div className="relative w-full h-[150px] md:h-[200px] rounded-lg border-2 border-primary overflow-hidden bg-muted">
-                        <div
-                          className="w-full h-full"
-                          style={{
-                            backgroundImage: `url(${formData.bannerUrl})`,
-                            backgroundSize: `${bannerZoom}%`,
-                            backgroundPosition: `${bannerPositionX}% ${bannerPositionY}%`,
-                            backgroundRepeat: 'no-repeat',
-                          }}
-                        />
-                      </div>
-                    </div>
-
                     {/* Controles de Ajuste - Accordion */}
                     <Accordion type="single" collapsible className="w-full">
                       <AccordionItem value="banner-adjustments" className="border border-border rounded-lg bg-muted/50">
