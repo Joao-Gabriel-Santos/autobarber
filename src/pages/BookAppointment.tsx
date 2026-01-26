@@ -571,12 +571,20 @@ const BookAppointment = () => {
       setClientName("");
       setClientWhatsapp("");
 
-      // Redirecionar para dashboard do cliente
-      const dashboardUrl = `/client-dashboard?whatsapp=%2B55${encodeURIComponent(clientWhatsapp)}&barbershop_id=${ownerId}&barbershop_slug=${barberSlug}`;
-      
-      setTimeout(() => {
-        window.location.href = dashboardUrl;
-      }, 2000);
+      // 1. Garanta que o número não tenha caracteres estranhos
+const cleanWhatsapp = clientWhatsapp.replace(/\D/g, ''); // Remove tudo que não é número
+
+// 2. Monte a string completa do WhatsApp (DDI + Número)
+const fullWhatsapp = `+55${cleanWhatsapp}`;
+
+// 3. Use o encode apenas na string FINAL completa
+const dashboardUrl = `/client-dashboard?whatsapp=${encodeURIComponent(fullWhatsapp)}&barbershop_id=${ownerId}&barbershop_slug=${barberSlug}`;
+
+// 4. No iOS, o window.location.href funciona melhor sem o setTimeout longo, 
+// mas se quiser manter o feedback do agendamento, reduza para 1500ms
+setTimeout(() => {
+  window.location.assign(dashboardUrl); // .assign é mais robusto que .href em alguns navegadores mobile
+}, 1500);
 
     } catch (error: any) {
       toast({

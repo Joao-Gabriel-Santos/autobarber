@@ -23,17 +23,19 @@ const ClientDashboard = () => {
   const barbershopId = searchParams.get("barbershop_id");
 
   useEffect(() => {
+  // Pequeno delay para garantir que o searchParams foi lido no iOS
+  const timer = setTimeout(() => {
     if (!whatsapp || !barbershopId) {
-      toast({
-        title: "Acesso inválido",
-        description: "Parâmetros de autenticação não encontrados",
-        variant: "destructive",
-      });
-      navigate("/");
+      console.error("Parâmetros ausentes no iOS:", { whatsapp, barbershopId });
+      // Se realmente não tiver, aí sim volta
+      if (!loading) navigate("/"); 
       return;
     }
     loadDashboard();
-  }, [whatsapp, barbershopId]);
+  }, 100);
+
+  return () => clearTimeout(timer);
+}, [whatsapp, barbershopId]);
 
   const loadDashboard = async () => {
     if (!whatsapp || !barbershopId) return;
@@ -73,28 +75,30 @@ const ClientDashboard = () => {
 
   // FUNÇÃO AUXILIAR PARA EVITAR TELA PRETA
   const safeFormatDate = (dateStr: any, formatStr: string) => {
-    if (!dateStr) return "—";
+  if (!dateStr) return "—";
 
-    try {
-      // Se já for uma data ISO (contém T ou espaço), o JS entende direto
-      // Se for apenas YYYY-MM-DD, adicionamos o T12:00 para travar o fuso
-      let finalDate: Date;
-      
-      if (typeof dateStr === 'string' && dateStr.length === 10) {
-        // Formato simples: 2026-01-26
-        finalDate = new Date(dateStr + 'T12:00:00');
-      } else {
-        // Formato completo: 2026-01-26 11:30:00 ou ISO
-        finalDate = new Date(dateStr);
-      }
-
-      if (!isValid(finalDate)) return "Data inválida";
-      
-      return format(finalDate, formatStr, { locale: ptBR });
-    } catch (e) {
-      return "—";
+  try {
+    // O iOS não aceita "YYYY-MM-DD HH:mm:ss". 
+    // Precisamos trocar o espaço por "T" para virar "YYYY-MM-DDTHH:mm:ss"
+    let formattedStr = String(dateStr).replace(/\s/g, 'T');
+    
+    let finalDate: Date;
+    
+    if (formattedStr.length === 10) {
+      // Data simples (YYYY-MM-DD)
+      finalDate = new Date(formattedStr + 'T12:00:00');
+    } else {
+      // Data completa ou ISO
+      finalDate = new Date(formattedStr);
     }
-  };
+
+    if (!isValid(finalDate)) return "Data inválida";
+    
+    return format(finalDate, formatStr, { locale: ptBR });
+  } catch (e) {
+    return "—";
+  }
+};
 
   if (loading) {
     return (
