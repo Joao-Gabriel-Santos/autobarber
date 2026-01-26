@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -14,6 +14,9 @@ const ClientAppointments = () => {
   const navigate = useNavigate();
   const [whatsapp, setWhatsapp] = useState("");
   const [loading, setLoading] = useState(false);
+  const [searchParams] = useSearchParams();
+
+  const barbershopId = searchParams.get("barbershop_id");
 
   const validateAndNormalize = (phone: string) => {
     const defaultCountry = 'BR' as CountryCode;
@@ -109,6 +112,20 @@ const ClientAppointments = () => {
     }
   };
 
+  const handleLogout = () => {
+        const slug = searchParams.get("barbershop_slug");
+        if (slug) {
+          navigate(`/book/${slug}`);
+        } else {
+          navigate("/");
+        }
+        
+        toast({
+          title: "Sessão encerrada",
+          description: "Você voltou para a página inicial da barbearia.",
+        });
+      };
+
   return (
     <div className="min-h-screen bg-gradient-dark">
       <header className="border-b border-border bg-card/50 backdrop-blur-sm">
@@ -175,9 +192,11 @@ const ClientAppointments = () => {
         </div>
 
         <div className="mt-6 text-center">
+          
           <Button 
             variant="ghost" 
-            onClick={() => navigate("/")}
+            onClick={handleLogout}
+            title="Sair"
           >
             ← Voltar para home
           </Button>

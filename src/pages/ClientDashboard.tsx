@@ -39,6 +39,20 @@ const ClientDashboard = () => {
     loadDashboard();
   }, [whatsapp, barbershopId]);
 
+  const handleLogout = () => {
+  const slug = searchParams.get("barbershop_slug");
+  if (slug) {
+    navigate(`/book/${slug}`);
+  } else {
+    navigate("/");
+  }
+  
+  toast({
+    title: "Sessão encerrada",
+    description: "Você voltou para a página inicial da barbearia.",
+  });
+};
+
   const loadDashboard = async () => {
     if (!whatsapp || !barbershopId) return;
 
@@ -121,7 +135,12 @@ const ClientDashboard = () => {
                 {client.total_cortes} {client.total_cortes === 1 ? "corte realizado" : "cortes realizados"}
               </p>
             </div>
-            <Button variant="ghost" size="icon">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={handleLogout}
+              title="Sair"
+            >
               <LogOut className="h-5 w-5" />
             </Button>
           </div>

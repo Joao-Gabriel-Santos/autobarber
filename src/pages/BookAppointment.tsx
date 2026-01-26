@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -13,7 +13,7 @@ import { ptBR } from "date-fns/locale";
 import { parsePhoneNumberFromString, CountryCode } from 'libphonenumber-js';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ClientService, WhatsAppService } from "@/services/clientService";
-import { Repeat, MessageCircle } from "lucide-react";
+import { Repeat, MessageCircle, User } from "lucide-react";
 
 interface Service {
   id: string;
@@ -63,6 +63,7 @@ const BookAppointment = () => {
   const { barberSlug } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
   
   const [loading, setLoading] = useState(true);
   const [services, setServices] = useState<Service[]>([]);
@@ -85,16 +86,61 @@ const BookAppointment = () => {
   
   const [isReturningClient, setIsReturningClient] = useState(false);
   const [lastService, setLastService] = useState<any>(null);
+  const [clientDataLoaded, setClientDataLoaded] = useState(false);
 
   useEffect(() => {
     loadBarbershopData();
   }, [barberSlug]);
 
   useEffect(() => {
+    const whatsappParam = searchParams.get("whatsapp");
+    if (whatsappParam && ownerId) {
+      loadClientData(whatsappParam);
+    }
+  }, [ownerId, searchParams]);
+
+  useEffect(() => {
     if (selectedDate && selectedService && selectedBarber) {
       generateAvailableTimes();
     }
   }, [selectedDate, selectedService, selectedBarber]);
+
+  const loadClientData = async (whatsapp: string) => {
+    if (clientDataLoaded) return; // Evitar múltiplas chamadas
+
+    const phoneCheck = validateAndNormalize(whatsapp);
+    if (!phoneCheck.valid) return;
+
+    try {
+      const { data: client } = await supabase
+        .from("clients")
+        .select("*")
+        .eq("barbershop_id", ownerId)
+        .eq("whatsapp", phoneCheck.e164)
+        .maybeSingle();
+
+      if (client) {
+        setClientName(client.nome);
+        setClientWhatsapp(whatsapp); // Manter formato original
+        setClientBirthday(client.data_nascimento || "");
+        setIsReturningClient(true);
+        setClientDataLoaded(true);
+
+        // Buscar último serviço
+        const lastSvc = await ClientService.getLastService(phoneCheck.e164, ownerId);
+        if (lastSvc) {
+          setLastService(lastSvc);
+        }
+
+        toast({
+          title: "Bem-vindo de volta! 👋",
+          description: `Olá ${client.nome}! Seus dados foram carregados automaticamente.`,
+        });
+      }
+    } catch (error) {
+      console.error("Error loading client data:", error);
+    }
+  };
 
   const handleWhatsAppClick = () => {
     if (!barbershopInfo?.whatsapp_number) {
@@ -107,7 +153,10 @@ const BookAppointment = () => {
     }
 
     // Remove caracteres não numéricos do número
-    const cleanNumber = barbershopInfo.whatsapp_number.replace(/\D/g, '');
+    let cleanNumber = barbershopInfo.whatsapp_number.replace(/\D/g, '');
+
+    if (cleanNumber.length <= 11) {
+    cleanNumber = `55${cleanNumber}`;}
     
     // Cria a mensagem padrão
     const message = encodeURIComponent(`Olá! Gostaria de mais informações sobre os serviços da ${barbershopInfo.name}.`);
@@ -523,7 +572,7 @@ const BookAppointment = () => {
       setClientWhatsapp("");
 
       // Redirecionar para dashboard do cliente
-      const dashboardUrl = `/client-dashboard?whatsapp=${encodeURIComponent(normalizedWhatsapp)}&barbershop_id=${ownerId}&barbershop_slug=${barberSlug}`;
+      const dashboardUrl = `/client-dashboard?whatsapp=%2B55${encodeURIComponent(clientWhatsapp)}&barbershop_id=${ownerId}&barbershop_slug=${barberSlug}`;
       
       setTimeout(() => {
         window.location.href = dashboardUrl;
@@ -619,7 +668,7 @@ const BookAppointment = () => {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => window.location.href = "/meus-agendamentos"}
+              onClick={() => window.location.href = (`/meus-agendamentos?barbershop_slug=${barberSlug}`)}
             >
               Ver Meus Agendamentos
             </Button>

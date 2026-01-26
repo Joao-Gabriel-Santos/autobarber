@@ -43,6 +43,7 @@ const Appointments = () => {
   const [loading, setLoading] = useState(true);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [activeTab, setActiveTab] = useState("confirmed");
+  const [barbershop, setBarbershop] = useState<any>(null);
 
   useEffect(() => {
     checkUser();
@@ -66,13 +67,21 @@ const Appointments = () => {
   };
 
   const loadAppointments = async (userId: string) => {
+    const { data: barbershopData } = await supabase
+      .from("barbershops")
+      .select("barbershop_name")
+      .eq("barber_id", userId)
+      .single();
+    
+    if (barbershopData) {
+      setBarbershop(barbershopData);
+    }
+
     const { data, error } = await supabase
       .from("appointments")
       .select(`
         *,
-        services (
-          name
-        )
+        services(name)
       `)
       .eq("barber_id", userId)
       .order("appointment_date", { ascending: true })
@@ -98,9 +107,19 @@ const Appointments = () => {
   const handleWhatsAppClick = (whatsappNumber: string, clientName: string, appointment_date: string, appointment_time: string) => {
     // Remove caracteres não numéricos do número
     const cleanNumber = whatsappNumber.replace(/\D/g, '');
+
+     const barbershopName = barbershop?.barbershop_name || 'nossa barbearia';
     
+    // 2. Formata a data: de "2026-01-25" para "25/01 e Horario"
+    const [year, month, day] = appointment_date.split('-');
+    const dateFormatted = `${day}/${month}`;
+    const timeFormatted = appointment_time.slice(0, 5);
+
     // Cria a mensagem padrão personalizada
-    const message = encodeURIComponent(`Olá, ${clientName} tudo bem? </br> Aqui é da barbearia ${barber_id}. </br> Passando só para confirmar seu agendamento para ${appointment_date} às ${appointment_time}. </br> Qualquer imprevisto é só avisar. Obrigado!`);
+    const message = encodeURIComponent(`Olá, *${clientName}* tudo bem?
+Aqui é da barbearia ${barbershopName}.
+Passando só para confirmar seu agendamento para o dia ${dateFormatted} às ${timeFormatted}.
+Qualquer imprevisto é só avisar. Obrigado!`);
     
     // Cria o link do WhatsApp
     const whatsappUrl = `https://wa.me/${cleanNumber}?text=${message}`;
@@ -164,7 +183,7 @@ const Appointments = () => {
         <div className="flex items-center gap-2">
           <Phone className="h-4 w-4 text-muted-foreground" />
           <button
-            onClick={() => handleWhatsAppClick(appointment.client_whatsapp, appointment.client_name)}
+            onClick={() => handleWhatsAppClick(appointment.client_whatsapp, appointment.client_name, appointment.appointment_date, appointment.appointment_time)}
             className="text-[#25D366] hover:text-[#20BA5A] hover:underline font-medium transition-colors flex items-center gap-1 group"
           >
             <span>{appointment.client_whatsapp}</span>
