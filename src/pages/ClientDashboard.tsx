@@ -5,11 +5,10 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Calendar, Clock,Gift, Zap, MapPin, LogOut, Repeat, Star } from "lucide-react";
+import { Calendar, Clock, Gift, Zap, LogOut, Repeat, Star } from "lucide-react";
 import { ClientService } from "@/services/clientService";
 import { ClientDashboardData } from "@/types/client";
-import { format } from "date-fns";
+import { format, isValid } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 
@@ -17,11 +16,9 @@ const ClientDashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
-  
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<ClientDashboardData | null>(null);
   
-  // Pegar WhatsApp e BarbershopID da URL (ou de auth)
   const whatsapp = searchParams.get("whatsapp");
   const barbershopId = searchParams.get("barbershop_id");
 
@@ -35,35 +32,15 @@ const ClientDashboard = () => {
       navigate("/");
       return;
     }
-
     loadDashboard();
   }, [whatsapp, barbershopId]);
 
-  const handleLogout = () => {
-  const slug = searchParams.get("barbershop_slug");
-  if (slug) {
-    navigate(`/book/${slug}`);
-  } else {
-    navigate("/");
-  }
-  
-  toast({
-    title: "Sessão encerrada",
-    description: "Você voltou para a página inicial da barbearia.",
-  });
-};
-
   const loadDashboard = async () => {
     if (!whatsapp || !barbershopId) return;
-
     setLoading(true);
     try {
       const data = await ClientService.getClientDashboard(whatsapp, barbershopId);
-      
-      if (!data) {
-        throw new Error("Cliente não encontrado");
-      }
-
+      if (!data) throw new Error("Cliente não encontrado");
       setDashboardData(data);
     } catch (error: any) {
       toast({
@@ -76,46 +53,47 @@ const ClientDashboard = () => {
     }
   };
 
+  const handleLogout = () => {
+    const slug = searchParams.get("barbershop_slug");
+    navigate(slug ? `/book/${slug}` : "/");
+    toast({ title: "Sessão encerrada" });
+  };
+
   const handleCancelAppointment = async (appointmentId: string) => {
-  if (!confirm("Tem certeza que deseja cancelar seu agendamento?")) return;
-
-  try {
-    const { error } = await ClientService.cancelAppointment(appointmentId);
-    
-    if (error) throw error;
-
-    toast({
-      title: "Agendamento cancelado",
-      description: "Seu horário foi liberado com sucesso.",
-    });
-    
-    // Recarrega o dashboard para sumir o card
-    loadDashboard();
-  } catch (error: any) {
-    toast({
-      title: "Erro ao cancelar",
-      description: "Não foi possível cancelar o agendamento.",
-      variant: "destructive",
-    });
-  }
-};
-
-  const handleRepeatLastService = async () => {
-    if (!dashboardData?.client.ultimo_servico) {
-      toast({
-        title: "Sem histórico",
-        description: "Você ainda não tem um serviço anterior registrado",
-        variant: "destructive",
-      });
-      return;
+    if (!confirm("Tem certeza que deseja cancelar seu agendamento?")) return;
+    try {
+      const { error } = await ClientService.cancelAppointment(appointmentId);
+      if (error) throw error;
+      toast({ title: "Agendamento cancelado" });
+      loadDashboard();
+    } catch (error: any) {
+      toast({ title: "Erro ao cancelar", variant: "destructive" });
     }
+  };
 
-    const { service_id, barber_id } = dashboardData.client.ultimo_servico;
-    
-    // Redirecionar para página de agendamento com serviço pré-selecionado
-    navigate(
-      `/book/${searchParams.get("barbershop_slug")}?service=${service_id}&barber=${barber_id}&whatsapp=${whatsapp}`
-    );
+  // FUNÇÃO AUXILIAR PARA EVITAR TELA PRETA
+  const safeFormatDate = (dateStr: any, formatStr: string) => {
+    if (!dateStr) return "—";
+
+    try {
+      // Se já for uma data ISO (contém T ou espaço), o JS entende direto
+      // Se for apenas YYYY-MM-DD, adicionamos o T12:00 para travar o fuso
+      let finalDate: Date;
+      
+      if (typeof dateStr === 'string' && dateStr.length === 10) {
+        // Formato simples: 2026-01-26
+        finalDate = new Date(dateStr + 'T12:00:00');
+      } else {
+        // Formato completo: 2026-01-26 11:30:00 ou ISO
+        finalDate = new Date(dateStr);
+      }
+
+      if (!isValid(finalDate)) return "Data inválida";
+      
+      return format(finalDate, formatStr, { locale: ptBR });
+    } catch (e) {
+      return "—";
+    }
   };
 
   if (loading) {
@@ -123,170 +101,64 @@ const ClientDashboard = () => {
       <div className="min-h-screen bg-gradient-dark flex items-center justify-center">
         <div className="text-center">
           <div className="h-12 w-12 rounded-lg bg-gradient-gold animate-pulse mx-auto mb-4" />
-          <p className="text-muted-foreground">Carregando seus dados...</p>
+          <p className="text-muted-foreground">Carregando...</p>
         </div>
       </div>
     );
   }
 
-  if (!dashboardData) {
-    return (
-      <div className="min-h-screen bg-gradient-dark flex items-center justify-center p-4">
-        <Card className="p-8 text-center max-w-md">
-          <h2 className="text-2xl font-bold mb-4">Dados não encontrados</h2>
-          <p className="text-muted-foreground mb-6">
-            Não conseguimos localizar suas informações.
-          </p>
-          <Button onClick={handleLogout}>
-            Voltar ao Início
-          </Button>
-        </Card>
-      </div>
-    );
-  }
+  if (!dashboardData) return null;
 
   const { client, proximo_agendamento, progresso_fidelidade, cupom_aniversario } = dashboardData;
 
   return (
     <div className="min-h-screen bg-gradient-dark pb-20">
-      {/* Header */}
       <header className="bg-card/50 backdrop-blur-sm border-b border-border sticky top-0 z-40">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-bold">Olá, {client.nome}! 👋</h1>
-              <p className="text-sm text-muted-foreground">
-                {client.total_cortes} {client.total_cortes === 1 ? "corte realizado" : "cortes realizados"}
-              </p>
-            </div>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={handleLogout}
-              title="Sair"
-            >
-              <LogOut className="h-5 w-5" />
-            </Button>
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold">Olá, {client.nome}! 👋</h1>
+            <p className="text-sm text-muted-foreground">{client.total_cortes} cortes realizados</p>
           </div>
+          <Button variant="ghost" size="icon" onClick={handleLogout}><LogOut className="h-5 w-5" /></Button>
         </div>
       </header>
 
       <main className="container mx-auto px-4 py-6 max-w-2xl space-y-6">
-        
-        {/* Cupom de Aniversário */}
+        {/* Cupom */}
         {cupom_aniversario?.ativo && (
           <Card className="p-6 bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border-yellow-500/30">
             <div className="flex items-center gap-4">
-              <div className="h-16 w-16 rounded-full bg-gradient-gold flex items-center justify-center">
-                <Gift className="h-8 w-8 text-primary-foreground" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-bold text-lg mb-1">
-                  🎂 Feliz Aniversário!
-                </h3>
-                <p className="text-sm text-muted-foreground mb-2">
-                  Você ganhou <strong className="text-primary">{cupom_aniversario.desconto}% OFF</strong> no seu próximo corte!
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Válido até {format(new Date(cupom_aniversario.valido_ate), "dd 'de' MMMM", { locale: ptBR })}
-                </p>
+              <Gift className="h-8 w-8 text-primary" />
+              <div>
+                <h3 className="font-bold">🎂 Feliz Aniversário!</h3>
+                <p className="text-sm">Ganhou {cupom_aniversario.desconto}% OFF!</p>
+                <p className="text-xs opacity-70">Válido até: {safeFormatDate(cupom_aniversario.valido_ate, "dd/MM")}</p>
               </div>
             </div>
           </Card>
         )}
 
-        {/* Próximo Agendamento */}
+        {/* Agendamento */}
         {proximo_agendamento ? (
           <Card className="p-6 border-primary/50 bg-primary/5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-lg">Próximo Agendamento</h3>
-              <Badge className="bg-green-500/10 text-green-500 border-green-500/20">
-                Confirmado
-              </Badge>
-            </div>
-            
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Calendar className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <p className="font-semibold">
-                    {format(new Date(proximo_agendamento.date), "EEEE, dd 'de' MMMM", { locale: ptBR })}
-                  </p>
-                  <p className="text-sm text-muted-foreground flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    {proximo_agendamento.time}
-                  </p>
-                </div>
-              </div>
-
-              <div className="pl-15 space-y-1">
-                <p className="text-sm">
-                  <strong>Serviço:</strong> {proximo_agendamento.service_name}
-                </p>
-                <p className="text-sm">
-                  <strong>Barbeiro:</strong> {proximo_agendamento.barber_name}
-                </p>
-                <p className="text-lg font-bold text-primary">
-                  R$ {proximo_agendamento.price.toFixed(2)}
-                </p>
+            <h3 className="font-bold mb-4">Próximo Agendamento</h3>
+            <div className="flex items-center gap-3 mb-4">
+              <Calendar className="text-primary" />
+              <div>
+                <p className="font-semibold">{safeFormatDate(proximo_agendamento.date, "EEEE, dd 'de' MMMM")}</p>
+                <p className="text-sm flex items-center gap-1"><Clock className="h-3 w-3" /> {proximo_agendamento.time}</p>
               </div>
             </div>
-
-            <div className="flex gap-2 mt-4">
-              <Button 
-                variant="outline" 
-                className="flex-1" 
-                size="sm"
-                onClick={() => {
-                  // Passamos o 'rescheduling' para a página de agendamento saber que deve deletar o antigo
-                  navigate(
-                    `/book/${searchParams.get("barbershop_slug")}?whatsapp=${whatsapp}&rescheduling=${proximo_agendamento.id}`
-                  );
-                }}
-              >
-                Reagendar
-              </Button>
-              <Button 
-                variant="destructive" 
-                className="flex-1" 
-                size="sm"
-                onClick={() => handleCancelAppointment(proximo_agendamento.id)}
-              >
-                Cancelar
-              </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => navigate(`/book/${searchParams.get("barbershop_slug")}?whatsapp=${whatsapp}&rescheduling=${proximo_agendamento.id}`)}>Reagendar</Button>
+              <Button variant="destructive" className="flex-1" onClick={() => handleCancelAppointment(proximo_agendamento.id)}>Cancelar</Button>
             </div>
           </Card>
         ) : (
           <Card className="p-8 text-center border-dashed border-2">
-            <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-            <h3 className="font-bold mb-2">Nenhum agendamento</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Que tal agendar seu próximo corte?
-            </p>
-            <Button 
-              onClick={() => navigate(`/book/${searchParams.get("barbershop_slug")}?whatsapp=${whatsapp}`)}
-              className="shadow-gold"
-            >
-              Agendar Agora
-            </Button>
+            <p className="mb-4">Nenhum agendamento futuro.</p>
+            <Button onClick={() => navigate(`/book/${searchParams.get("barbershop_slug")}?whatsapp=${whatsapp}`)}>Agendar Agora</Button>
           </Card>
-        )}
-
-        {/* Botão "O de Sempre" */}
-        {client.ultimo_servico && (
-          <Button
-            onClick={handleRepeatLastService}
-            className="w-full h-16 text-lg shadow-gold"
-            size="lg"
-          >
-            <Repeat className="h-5 w-5 mr-2" />
-            O de Sempre
-            <span className="ml-2 text-sm opacity-80">
-              ({client.ultimo_servico.service_name})
-            </span>
-          </Button>
         )}
 
         {/* Progresso de Fidelidade */}
@@ -343,43 +215,20 @@ const ClientDashboard = () => {
             </p>
           </div>
         </Card>
-
-        {/* Estatísticas */}
+        
+        {/* Estatísticas - Onde dava o erro */}
         <div className="grid grid-cols-2 gap-4">
           <Card className="p-4 text-center">
-            <p className="text-2xl font-bold text-primary">
-              {client.total_cortes}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Total de Cortes
-            </p>
+            <p className="text-2xl font-bold text-primary">{client.total_cortes}</p>
+            <p className="text-xs text-muted-foreground">Total de Cortes</p>
           </Card>
-          
           <Card className="p-4 text-center">
             <p className="text-2xl font-bold">
-              {client.data_ultimo_corte ? (
-                format(new Date(client.data_ultimo_corte), "dd/MM/yy")
-              ) : (
-                "—"
-              )}
+              {safeFormatDate(client.data_ultimo_corte, "dd/MM/yy")}
             </p>
-            <p className="text-xs text-muted-foreground">
-              Último Corte
-            </p>
+            <p className="text-xs text-muted-foreground">Último Corte</p>
           </Card>
         </div>
-
-        {/* CTA Agendar */}
-        {!proximo_agendamento && (
-            <Button
-              onClick={() => navigate(`/book/${searchParams.get("barbershop_slug")}?whatsapp=${whatsapp}`)}
-              className="w-full shadow-gold"
-              size="lg"
-            >
-              <Zap className="h-5 w-5 mr-2" />
-              Agendar Novo Corte
-            </Button>
-        )}
       </main>
     </div>
   );

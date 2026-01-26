@@ -100,8 +100,7 @@ const Appointments = () => {
   };
 
   function parseDateAsLocal(dateString: string) {
-    const [year, month, day] = dateString.split('-').map(Number);
-    return new Date(year, month - 1, day);
+    return new Date(dateString + 'T12:00:00');
   }
 
   const handleWhatsAppClick = (whatsappNumber: string, clientName: string, appointment_date: string, appointment_time: string) => {
@@ -128,14 +127,17 @@ Qualquer imprevisto é só avisar. Obrigado!`);
     window.open(whatsappUrl, '_blank');
   };
 
+  const [isUpdating, setIsUpdating] = useState(false);
+
   const updateStatus = async (id: string, status: string) => {
+    if (isUpdating) return; // Trava para evitar cliques duplos
+    setIsUpdating(true);
+
     try {
       const { error } = await supabase
         .from("appointments")
         .update({ status })
-        .eq("id", id)
-        .select()
-        .single();
+        .eq("id", id);
 
       if (error) throw error;
 
@@ -150,6 +152,8 @@ Qualquer imprevisto é só avisar. Obrigado!`);
         description: error.message,
         variant: "destructive",
       });
+    } finally {
+      setIsUpdating(false);
     }
   };
 
