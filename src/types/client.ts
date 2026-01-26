@@ -48,6 +48,7 @@ export interface ClientDashboardData {
     service_name: string;
     barber_name: string;
     price: number;
+    status: string;
   } | null;
   progresso_fidelidade: {
     cortes_atuais: number;

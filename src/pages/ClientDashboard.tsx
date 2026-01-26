@@ -76,6 +76,30 @@ const ClientDashboard = () => {
     }
   };
 
+  const handleCancelAppointment = async (appointmentId: string) => {
+  if (!confirm("Tem certeza que deseja cancelar seu agendamento?")) return;
+
+  try {
+    const { error } = await ClientService.cancelAppointment(appointmentId);
+    
+    if (error) throw error;
+
+    toast({
+      title: "Agendamento cancelado",
+      description: "Seu horário foi liberado com sucesso.",
+    });
+    
+    // Recarrega o dashboard para sumir o card
+    loadDashboard();
+  } catch (error: any) {
+    toast({
+      title: "Erro ao cancelar",
+      description: "Não foi possível cancelar o agendamento.",
+      variant: "destructive",
+    });
+  }
+};
+
   const handleRepeatLastService = async () => {
     if (!dashboardData?.client.ultimo_servico) {
       toast({
@@ -113,7 +137,7 @@ const ClientDashboard = () => {
           <p className="text-muted-foreground mb-6">
             Não conseguimos localizar suas informações.
           </p>
-          <Button onClick={() => navigate("/")}>
+          <Button onClick={handleLogout}>
             Voltar ao Início
           </Button>
         </Card>
@@ -211,10 +235,25 @@ const ClientDashboard = () => {
             </div>
 
             <div className="flex gap-2 mt-4">
-              <Button variant="outline" className="flex-1" size="sm">
+              <Button 
+                variant="outline" 
+                className="flex-1" 
+                size="sm"
+                onClick={() => {
+                  // Passamos o 'rescheduling' para a página de agendamento saber que deve deletar o antigo
+                  navigate(
+                    `/book/${searchParams.get("barbershop_slug")}?whatsapp=${whatsapp}&rescheduling=${proximo_agendamento.id}`
+                  );
+                }}
+              >
                 Reagendar
               </Button>
-              <Button variant="destructive" className="flex-1" size="sm">
+              <Button 
+                variant="destructive" 
+                className="flex-1" 
+                size="sm"
+                onClick={() => handleCancelAppointment(proximo_agendamento.id)}
+              >
                 Cancelar
               </Button>
             </div>
@@ -227,7 +266,7 @@ const ClientDashboard = () => {
               Que tal agendar seu próximo corte?
             </p>
             <Button 
-              onClick={() => navigate(`/book/${searchParams.get("barbershop_slug")}`)}
+              onClick={() => navigate(`/book/${searchParams.get("barbershop_slug")}?whatsapp=${whatsapp}`)}
               className="shadow-gold"
             >
               Agendar Agora
@@ -332,14 +371,14 @@ const ClientDashboard = () => {
 
         {/* CTA Agendar */}
         {!proximo_agendamento && (
-          <Button
-            onClick={() => navigate(`/book/${searchParams.get("barbershop_slug")}`)}
-            className="w-full shadow-gold"
-            size="lg"
-          >
-            <Zap className="h-5 w-5 mr-2" />
-            Agendar Novo Corte
-          </Button>
+            <Button
+              onClick={() => navigate(`/book/${searchParams.get("barbershop_slug")}?whatsapp=${whatsapp}`)}
+              className="w-full shadow-gold"
+              size="lg"
+            >
+              <Zap className="h-5 w-5 mr-2" />
+              Agendar Novo Corte
+            </Button>
         )}
       </main>
     </div>

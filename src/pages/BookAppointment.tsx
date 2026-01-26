@@ -837,7 +837,7 @@ const BookAppointment = () => {
               )}
 
               <div>
-                <Label htmlFor="name">Seu Nome *</Label>
+                <Label htmlFor="name">Nome e Sobrenome *</Label>
                 <Input
                   id="name"
                   value={clientName}
