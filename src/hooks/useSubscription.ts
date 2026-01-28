@@ -126,8 +126,18 @@ export function useSubscription(): UseSubscriptionReturn {
         const currentPeriodEnd = new Date(subData.current_period_end);
         const now = new Date();
         
-        if (['active', 'trialing'].includes(status) && currentPeriodEnd > now) {
+        // ✅ CORREÇÃO PRINCIPAL: Simplificar a lógica de verificação
+        // Se o status é 'active' ou 'trialing', considerar válido
+        // Não verificar data se status for 'active' (Stripe já gerencia isso)
+        if (status === 'active' || status === 'trialing') {
           accessStatus = true;
+          console.log('✅ Assinatura válida:', status);
+        } else if (status === 'past_due' && currentPeriodEnd > now) {
+          // Dar tolerância para pagamentos atrasados dentro do período
+          accessStatus = true;
+          console.log('⚠️ Assinatura com pagamento atrasado, mas dentro do período');
+        } else {
+          console.log('❌ Assinatura inválida:', status, 'Data fim:', currentPeriodEnd);
         }
 
         const planType = subData.plan.toLowerCase() as PlanType;
@@ -135,6 +145,13 @@ export function useSubscription(): UseSubscriptionReturn {
         if (planType in PLAN_FEATURES) {
           finalPlan = planType;
         }
+
+        console.log('📊 Status final:', {
+          plan: finalPlan,
+          hasAccess: accessStatus,
+          status: status,
+          periodEnd: currentPeriodEnd.toISOString()
+        });
       }
       
       setSubscription(subData);
