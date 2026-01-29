@@ -341,7 +341,7 @@ const Index = () => {
       {/* Footer */}
       <footer className="border-t border-border py-8">
         <div className="container mx-auto px-4 text-center text-muted-foreground">
-          <p>© 2026 AutoBarber. Todos os direitos reservados.</p>
+          <p>© 2026 AutoBarber. Desenvolvido pela GsTecnologgy.</p>
         </div>
       </footer>
     </div>
