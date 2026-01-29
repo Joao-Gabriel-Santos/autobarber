@@ -1,92 +1,127 @@
-// src/pages/ClientDashboard.tsx
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { 
-  Calendar, 
-  Clock, 
-  Gift, 
-  Zap, 
-  MapPin,
-  LogOut,
-  Repeat,
-  Star
+  ArrowLeft,
+  Search,
+  Users,
+  Calendar,
+  TrendingUp,
+  Gift,
+  Filter,
+  Phone,
+  MessageCircle
 } from "lucide-react";
 import { ClientService } from "@/services/clientService";
-import { ClientDashboardData } from "@/types/client";
-import { format } from "date-fns";
+import { ClientWithMetrics, ClientFilters } from "@/types/client";
+import { format, isValid } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
-const ClientDashboard = () => {
+const ClientsManagement = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [searchParams] = useSearchParams();
   
+  const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [dashboardData, setDashboardData] = useState<ClientDashboardData | null>(null);
+  const [clients, setClients] = useState<ClientWithMetrics[]>([]);
+  const [stats, setStats] = useState<any>(null);
   
-  // Pegar WhatsApp e BarbershopID da URL (ou de auth)
-  const whatsapp = searchParams.get("whatsapp");
-  const barbershopId = searchParams.get("barbershop_id");
+  const [filters, setFilters] = useState<ClientFilters>({
+    search: "",
+    inativos: false,
+    aniversariantes: false,
+    sortBy: "nome",
+    sortOrder: "asc"
+  });
 
   useEffect(() => {
-    if (!whatsapp || !barbershopId) {
-      toast({
-        title: "Acesso inválido",
-        description: "Parâmetros de autenticação não encontrados",
-        variant: "destructive",
-      });
-      navigate("/");
-      return;
+    checkUser();
+  }, []);
+
+  useEffect(() => {
+    if (user) {
+      loadClients();
+      loadStats();
     }
+  }, [user, filters]);
 
-    loadDashboard();
-  }, [whatsapp, barbershopId]);
-
-  const loadDashboard = async () => {
-    if (!whatsapp || !barbershopId) return;
-
-    setLoading(true);
+  const checkUser = async () => {
     try {
-      const data = await ClientService.getClientDashboard(whatsapp, barbershopId);
+      const { data: { user } } = await supabase.auth.getUser();
       
-      if (!data) {
-        throw new Error("Cliente não encontrado");
+      if (!user) {
+        navigate("/login");
+        return;
       }
 
-      setDashboardData(data);
-    } catch (error: any) {
-      toast({
-        title: "Erro ao carregar dados",
-        description: error.message,
-        variant: "destructive",
-      });
+      // Verificar se é owner
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+
+      if (profile?.role !== 'owner') {
+        toast({
+          title: "Acesso negado",
+          description: "Apenas donos podem acessar esta página",
+          variant: "destructive",
+        });
+        navigate("/dashboard");
+        return;
+      }
+
+      setUser(user);
+    } catch (error) {
+      console.error("Error checking user:", error);
+      navigate("/login");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleRepeatLastService = async () => {
-    if (!dashboardData?.client.ultimo_servico) {
-      toast({
-        title: "Sem histórico",
-        description: "Você ainda não tem um serviço anterior registrado",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const { service_id, barber_id } = dashboardData.client.ultimo_servico;
+  const loadClients = async () => {
+    if (!user) return;
     
-    // Redirecionar para página de agendamento com serviço pré-selecionado
-    navigate(
-      `/book/${searchParams.get("barbershop_slug")}?service=${service_id}&barber=${barber_id}&whatsapp=${whatsapp}`
-    );
+    const data = await ClientService.listClients(user.id, filters);
+    setClients(data);
+  };
+
+  const loadStats = async () => {
+    if (!user) return;
+    
+    const data = await ClientService.getClientStats(user.id);
+    setStats(data);
+  };
+
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return "—";
+    try {
+      const date = new Date(dateStr);
+      if (!isValid(date)) return "—";
+      return format(date, "dd/MM/yyyy", { locale: ptBR });
+    } catch {
+      return "—";
+    }
+  };
+
+  const handleWhatsAppClick = (whatsapp: string, clientName: string) => {
+    const cleanNumber = whatsapp.replace(/\D/g, '');
+    const message = encodeURIComponent(`Olá ${clientName}, tudo bem? Aqui é da barbearia!`);
+    const whatsappUrl = `https://wa.me/${cleanNumber}?text=${message}`;
+    window.open(whatsappUrl, '_blank');
   };
 
   if (loading) {
@@ -94,246 +129,214 @@ const ClientDashboard = () => {
       <div className="min-h-screen bg-gradient-dark flex items-center justify-center">
         <div className="text-center">
           <div className="h-12 w-12 rounded-lg bg-gradient-gold animate-pulse mx-auto mb-4" />
-          <p className="text-muted-foreground">Carregando seus dados...</p>
+          <p className="text-muted-foreground">Carregando...</p>
         </div>
       </div>
     );
   }
 
-  if (!dashboardData) {
-    return (
-      <div className="min-h-screen bg-gradient-dark flex items-center justify-center p-4">
-        <Card className="p-8 text-center max-w-md">
-          <h2 className="text-2xl font-bold mb-4">Dados não encontrados</h2>
-          <p className="text-muted-foreground mb-6">
-            Não conseguimos localizar suas informações.
-          </p>
-          <Button onClick={() => navigate("/")}>
-            Voltar ao Início
-          </Button>
-        </Card>
-      </div>
-    );
-  }
-
-  const { client, proximo_agendamento, progresso_fidelidade, cupom_aniversario } = dashboardData;
-
   return (
-    <div className="min-h-screen bg-gradient-dark pb-20">
+    <div className="min-h-screen bg-gradient-dark">
       {/* Header */}
-      <header className="bg-card/50 backdrop-blur-sm border-b border-border sticky top-0 z-40">
+      <header className="border-b border-border bg-card/50 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard")}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
             <div>
-              <h1 className="text-xl font-bold">Olá, {client.nome}! 👋</h1>
+              <h1 className="text-2xl font-bold">Gerenciar Clientes</h1>
               <p className="text-sm text-muted-foreground">
-                {client.total_cortes} {client.total_cortes === 1 ? "corte realizado" : "cortes realizados"}
+                Visualize e gerencie sua base de clientes
               </p>
             </div>
-            <Button variant="ghost" size="icon">
-              <LogOut className="h-5 w-5" />
-            </Button>
           </div>
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-6 max-w-2xl space-y-6">
-        
-        {/* Cupom de Aniversário */}
-        {cupom_aniversario?.ativo && (
-          <Card className="p-6 bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border-yellow-500/30">
-            <div className="flex items-center gap-4">
-              <div className="h-16 w-16 rounded-full bg-gradient-gold flex items-center justify-center">
-                <Gift className="h-8 w-8 text-primary-foreground" />
+      <main className="container mx-auto px-4 py-8 max-w-7xl">
+        {/* Estatísticas */}
+        {stats && (
+          <div className="grid md:grid-cols-4 gap-6 mb-8">
+            <Card className="p-6 border-border bg-card hover:border-primary/50 transition-all">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-muted-foreground">Total de Clientes</span>
+                <Users className="h-4 w-4 text-primary" />
               </div>
-              <div className="flex-1">
-                <h3 className="font-bold text-lg mb-1">
-                  🎂 Feliz Aniversário!
-                </h3>
-                <p className="text-sm text-muted-foreground mb-2">
-                  Você ganhou <strong className="text-primary">{cupom_aniversario.desconto}% OFF</strong> no seu próximo corte!
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Válido até {format(new Date(cupom_aniversario.valido_ate), "dd 'de' MMMM", { locale: ptBR })}
-                </p>
+              <p className="text-3xl font-bold text-primary">
+                {stats.total_clientes}
+              </p>
+            </Card>
+
+            <Card className="p-6 border-border bg-card hover:border-primary/50 transition-all">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-muted-foreground">Clientes Ativos</span>
+                <TrendingUp className="h-4 w-4 text-green-500" />
               </div>
-            </div>
-          </Card>
-        )}
+              <p className="text-3xl font-bold text-green-500">
+                {stats.clientes_ativos}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Último corte há menos de 30 dias
+              </p>
+            </Card>
 
-        {/* Próximo Agendamento */}
-        {proximo_agendamento ? (
-          <Card className="p-6 border-primary/50 bg-primary/5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-lg">Próximo Agendamento</h3>
-              <Badge className="bg-green-500/10 text-green-500 border-green-500/20">
-                Confirmado
-              </Badge>
-            </div>
-            
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Calendar className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <p className="font-semibold">
-                    {format(new Date(proximo_agendamento.date), "EEEE, dd 'de' MMMM", { locale: ptBR })}
-                  </p>
-                  <p className="text-sm text-muted-foreground flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    {proximo_agendamento.time}
-                  </p>
-                </div>
+            <Card className="p-6 border-border bg-card hover:border-primary/50 transition-all">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-muted-foreground">Clientes Inativos</span>
+                <Calendar className="h-4 w-4 text-yellow-500" />
               </div>
+              <p className="text-3xl font-bold text-yellow-500">
+                {stats.clientes_inativos}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Mais de 30 dias sem corte
+              </p>
+            </Card>
 
-              <div className="pl-15 space-y-1">
-                <p className="text-sm">
-                  <strong>Serviço:</strong> {proximo_agendamento.service_name}
-                </p>
-                <p className="text-sm">
-                  <strong>Barbeiro:</strong> {proximo_agendamento.barber_name}
-                </p>
-                <p className="text-lg font-bold text-primary">
-                  R$ {proximo_agendamento.price.toFixed(2)}
-                </p>
+            <Card className="p-6 border-border bg-card hover:border-primary/50 transition-all">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-muted-foreground">Aniversariantes</span>
+                <Gift className="h-4 w-4 text-primary" />
               </div>
-            </div>
-
-            <div className="flex gap-2 mt-4">
-              <Button variant="outline" className="flex-1" size="sm">
-                Reagendar
-              </Button>
-              <Button variant="destructive" className="flex-1" size="sm">
-                Cancelar
-              </Button>
-            </div>
-          </Card>
-        ) : (
-          <Card className="p-8 text-center border-dashed border-2">
-            <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-            <h3 className="font-bold mb-2">Nenhum agendamento</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Que tal agendar seu próximo corte?
-            </p>
-            <Button 
-              onClick={() => navigate(`/book/${searchParams.get("barbershop_slug")}`)}
-              className="shadow-gold"
-            >
-              Agendar Agora
-            </Button>
-          </Card>
-        )}
-
-        {/* Botão "O de Sempre" */}
-        {client.ultimo_servico && (
-          <Button
-            onClick={handleRepeatLastService}
-            className="w-full h-16 text-lg shadow-gold"
-            size="lg"
-          >
-            <Repeat className="h-5 w-5 mr-2" />
-            O de Sempre
-            <span className="ml-2 text-sm opacity-80">
-              ({client.ultimo_servico.service_name})
-            </span>
-          </Button>
-        )}
-
-        {/* Progresso de Fidelidade */}
-        <Card className="p-6">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-bold text-lg">Programa de Fidelidade</h3>
-            <Star className="h-5 w-5 text-primary" />
+              <p className="text-3xl font-bold text-primary">
+                {stats.aniversariantes_mes}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Neste mês
+              </p>
+            </Card>
           </div>
+        )}
 
-          <div className="space-y-4">
-            <div>
-              <div className="flex justify-between text-sm mb-2">
-                <span className="text-muted-foreground">
-                  {progresso_fidelidade.cortes_atuais} de {progresso_fidelidade.cortes_necessarios} cortes
-                </span>
-                <span className="font-bold text-primary">
-                  {Math.floor(progresso_fidelidade.progresso_percentual)}%
-                </span>
+        {/* Filtros */}
+        <Card className="p-6 mb-6 border-border bg-card">
+          <div className="grid md:grid-cols-4 gap-4">
+            <div className="md:col-span-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por nome ou WhatsApp..."
+                  value={filters.search}
+                  onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                  className="pl-10"
+                />
               </div>
-              <Progress 
-                value={progresso_fidelidade.progresso_percentual} 
-                className="h-3"
-              />
             </div>
 
-            {/* Carimbos Visuais */}
-            <div className="grid grid-cols-5 gap-2">
-              {Array.from({ length: progresso_fidelidade.cortes_necessarios }).map((_, i) => (
-                <div
-                  key={i}
-                  className={`
-                    aspect-square rounded-lg border-2 flex items-center justify-center
-                    ${i < progresso_fidelidade.cortes_atuais
-                      ? "bg-primary border-primary"
-                      : "bg-muted border-border"
-                    }
-                  `}
-                >
-                  {i < progresso_fidelidade.cortes_atuais && (
-                    <Star className="h-4 w-4 text-primary-foreground fill-current" />
-                  )}
-                </div>
-              ))}
-            </div>
+            <Select
+              value={filters.sortBy}
+              onValueChange={(value) => setFilters({ ...filters, sortBy: value as any })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Ordenar por" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="nome">Nome</SelectItem>
+                <SelectItem value="total_cortes">Total de Cortes</SelectItem>
+                <SelectItem value="data_ultimo_corte">Último Corte</SelectItem>
+              </SelectContent>
+            </Select>
 
-            <p className="text-sm text-center text-muted-foreground">
-              {progresso_fidelidade.cortes_necessarios - progresso_fidelidade.cortes_atuais === 1 ? (
-                <span className="text-primary font-semibold">
-                  Falta apenas 1 corte para ganhar um benefício! 🎁
-                </span>
-              ) : (
-                `Faltam ${progresso_fidelidade.cortes_necessarios - progresso_fidelidade.cortes_atuais} cortes para o próximo benefício`
-              )}
-            </p>
+            <div className="flex gap-2">
+              <Button
+                variant={filters.inativos ? "default" : "outline"}
+                size="sm"
+                onClick={() => setFilters({ ...filters, inativos: !filters.inativos })}
+                className="flex-1"
+              >
+                Inativos
+              </Button>
+              <Button
+                variant={filters.aniversariantes ? "default" : "outline"}
+                size="sm"
+                onClick={() => setFilters({ ...filters, aniversariantes: !filters.aniversariantes })}
+                className="flex-1"
+              >
+                <Gift className="h-4 w-4 mr-1" />
+                Aniversário
+              </Button>
+            </div>
           </div>
         </Card>
 
-        {/* Estatísticas */}
-        <div className="grid grid-cols-2 gap-4">
-          <Card className="p-4 text-center">
-            <p className="text-2xl font-bold text-primary">
-              {client.total_cortes}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Total de Cortes
-            </p>
-          </Card>
-          
-          <Card className="p-4 text-center">
-            <p className="text-2xl font-bold">
-              {client.data_ultimo_corte ? (
-                format(new Date(client.data_ultimo_corte), "dd/MM/yy")
-              ) : (
-                "—"
-              )}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Último Corte
-            </p>
-          </Card>
-        </div>
+        {/* Lista de Clientes */}
+        <div className="space-y-4">
+          {clients.length === 0 ? (
+            <Card className="p-12 text-center border-border bg-card">
+              <p className="text-muted-foreground">
+                Nenhum cliente encontrado com os filtros aplicados.
+              </p>
+            </Card>
+          ) : (
+            clients.map((client) => (
+              <Card key={client.id} className="p-6 border-border bg-card hover:border-primary/50 transition-all">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-lg">
+                        {client.nome.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-lg">{client.nome}</h3>
+                        <div className="flex items-center gap-2 text-sm">
+                          <button
+                            onClick={() => handleWhatsAppClick(client.whatsapp, client.nome)}
+                            className="text-[#25D366] hover:text-[#20BA5A] hover:underline font-medium transition-colors flex items-center gap-1 group"
+                          >
+                            <Phone className="h-3 w-3" />
+                            <span>{client.whatsapp}</span>
+                            <MessageCircle className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
 
-        {/* CTA Agendar */}
-        {!proximo_agendamento && (
-          <Button
-            onClick={() => navigate(`/book/${searchParams.get("barbershop_slug")}`)}
-            className="w-full shadow-gold"
-            size="lg"
-          >
-            <Zap className="h-5 w-5 mr-2" />
-            Agendar Novo Corte
-          </Button>
-        )}
+                    <div className="grid md:grid-cols-4 gap-4">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Total de Cortes</p>
+                        <p className="font-bold text-primary text-lg">{client.total_cortes}</p>
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-muted-foreground">Último Corte</p>
+                        <p className="font-semibold">{formatDate(client.data_ultimo_corte)}</p>
+                        {client.dias_sem_corte !== undefined && (
+                          <p className="text-xs text-muted-foreground">
+                            {client.dias_sem_corte} dias atrás
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-muted-foreground">Aniversário</p>
+                        <p className="font-semibold">{formatDate(client.data_nascimento)}</p>
+                        {client.is_aniversariante && (
+                          <Badge className="mt-1 bg-primary/10 text-primary border-primary/20">
+                            🎂 Aniversariante
+                          </Badge>
+                        )}
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-muted-foreground">Próximo Benefício</p>
+                        <p className="font-semibold">
+                          {client.proximo_beneficio !== undefined 
+                            ? `Faltam ${client.proximo_beneficio} cortes`
+                            : "—"
+                          }
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            ))
+          )}
+        </div>
       </main>
     </div>
   );
 };
 
-export default ClientDashboard;
+export default ClientsManagement;
