@@ -1,22 +1,12 @@
 // src/services/clientService.ts
 import { supabase } from "@/integrations/supabase/client";
-import { Client, ClientWithMetrics, ClientFilters, ClientDashboardData, FidelityConfig } from "@/types/client";
-import { format } from "date-fns";
-
-// ============================================
-// CONFIGURAÇÃO DE FIDELIDADE (pode vir do DB futuramente)
-// ============================================
-const FIDELITY_CONFIG: FidelityConfig = {
-  cortes_para_beneficio: 10,
-  desconto_aniversario: 20, // 20%
-  dias_validade_cupom: 30,
-};
+import { Client, ClientWithMetrics, ClientFilters, ClientDashboardData } from "@/types/client";
+import { differenceInDays, startOfDay, parseISO } from "date-fns";
 
 export class ClientService {
-  
-  // ============================================
-  // CRIAR/ATUALIZAR CLIENTE (Cadastro Invisível)
-  // ============================================
+  /**
+   * Busca ou cria um cliente (upsert)
+   */
   static async upsertClient(
     barbershopId: string,
     whatsapp: string,
@@ -24,32 +14,28 @@ export class ClientService {
     dataNascimento?: string
   ): Promise<Client | null> {
     try {
-      // Verificar se cliente já existe
-      const { data: existing } = await supabase
+      const { data: existingClient } = await supabase
         .from("clients")
         .select("*")
         .eq("barbershop_id", barbershopId)
         .eq("whatsapp", whatsapp)
         .maybeSingle();
 
-      if (existing) {
-        // Cliente já existe, apenas atualizar nome/data se fornecidos
-        const updates: Partial<Client> = {};
-        if (nome && nome !== existing.nome) updates.nome = nome;
-        if (dataNascimento && !existing.data_nascimento) {
-          updates.data_nascimento = dataNascimento;
-        }
+      if (existingClient) {
+        // Atualizar cliente existente
+        const { data, error } = await supabase
+          .from("clients")
+          .update({
+            nome,
+            data_nascimento: dataNascimento || existingClient.data_nascimento,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existingClient.id)
+          .select()
+          .single();
 
-        if (Object.keys(updates).length > 0) {
-          const { data } = await supabase
-            .from("clients")
-            .update(updates)
-            .eq("id", existing.id)
-            .select()
-            .single();
-          return data;
-        }
-        return existing;
+        if (error) throw error;
+        return data;
       }
 
       // Criar novo cliente
@@ -57,8 +43,8 @@ export class ClientService {
         .from("clients")
         .insert({
           barbershop_id: barbershopId,
-          whatsapp,
           nome,
+          whatsapp,
           data_nascimento: dataNascimento || null,
           total_cortes: 0,
         })
@@ -68,64 +54,27 @@ export class ClientService {
       if (error) throw error;
       return data;
     } catch (error) {
-      console.error("Error upserting client:", error);
+      console.error("Error in upsertClient:", error);
       return null;
     }
   }
 
-  static async cancelAppointment(appointmentId: string) {
-  // Você pode deletar ou apenas mudar o status para 'cancelled'
-  const { error } = await supabase
-    .from("appointments")
-    .delete() // Ou .update({ status: 'cancelled' })
-    .eq("id", appointmentId);
-
-  return { error };
-}
-
-  // ============================================
-  // VINCULAR AGENDAMENTO AO CLIENTE
-  // ============================================
-  static async linkAppointmentToClient(
-    appointmentId: string,
+  /**
+   * Busca último serviço realizado por um cliente
+   */
+  static async getLastService(
     whatsapp: string,
     barbershopId: string
-  ): Promise<boolean> {
+  ): Promise<any | null> {
     try {
-      const { data: client } = await supabase
-        .from("clients")
-        .select("id")
-        .eq("barbershop_id", barbershopId)
-        .eq("whatsapp", whatsapp)
-        .single();
-
-      if (!client) return false;
-
-      const { error } = await supabase
-        .from("appointments")
-        .update({ client_id: client.id })
-        .eq("id", appointmentId);
-
-      return !error;
-    } catch (error) {
-      console.error("Error linking appointment:", error);
-      return false;
-    }
-  }
-
-  // ============================================
-  // BUSCAR ÚLTIMO SERVIÇO DO CLIENTE
-  // ============================================
-  static async getLastService(whatsapp: string, barbershopId: string) {
-    try {
-      const { data } = await supabase
+      // Buscar último agendamento
+      const { data: appointment } = await supabase
         .from("appointments")
         .select(`
+          id,
           service_id,
           barber_id,
-          services!inner (
-            name
-          )
+          appointment_date
         `)
         .eq("client_whatsapp", whatsapp)
         .eq("status", "completed")
@@ -134,113 +83,40 @@ export class ClientService {
         .limit(1)
         .maybeSingle();
 
-      if (!data) return null;
+      if (!appointment) return null;
 
-      // Buscar nome do barbeiro separadamente
-      const { data: barberProfile } = await supabase
+      // Buscar dados do serviço separadamente
+      const { data: service } = await supabase
+        .from("services")
+        .select("id, name")
+        .eq("id", appointment.service_id)
+        .single();
+
+      // Buscar dados do barbeiro separadamente
+      const { data: barber } = await supabase
         .from("profiles")
-        .select("full_name")
-        .eq("id", data.barber_id)
+        .select("id, full_name")
+        .eq("id", appointment.barber_id)
         .single();
 
       return {
-        service_id: data.service_id,
-        service_name: (data.services as any)?.name || "Serviço",
-        barber_id: data.barber_id,
-        barber_name: barberProfile?.full_name || "Barbeiro",
+        service_id: appointment.service_id,
+        service_name: service?.name || "Serviço",
+        barber_id: appointment.barber_id,
+        barber_name: barber?.full_name || "Barbeiro",
       };
     } catch (error) {
-      console.error("Error getting last service:", error);
+      console.error("Error in getLastService:", error);
       return null;
     }
   }
 
-  // ============================================
-  // DASHBOARD DO CLIENTE
-  // ============================================
-  static async getClientDashboard(
-    whatsapp: string,
-    barbershopId: string
-  ): Promise<ClientDashboardData | null> {
-    try {
-      // 1. Buscar dados do cliente
-      const { data: client } = await supabase
-        .from("clients")
-        .select("*")
-        .eq("barbershop_id", barbershopId)
-        .eq("whatsapp", whatsapp)
-        .single();
-
-      if (!client) return null;
-
-      // 2. Buscar agendamento (Ajuste na Query)
-      // Removemos o gte restrito para garantir que agendamentos de hoje apareçam
-      const todayStr = format(new Date(), "yyyy-MM-dd");
-
-    // Versão 2 (Mais robusta)
-const { data: nextAppt } = await supabase
-  .from("appointments")
-  .select(`
-    id,
-    appointment_date,
-    appointment_time,
-    price,
-    status,
-    services (name)
-  `)
-  .eq("client_whatsapp", whatsapp)
-  .in("status", ["confirmed", "pending"])
-  .gte("appointment_date", todayStr)
-  .limit(1)
-  .maybeSingle();
-
-// Se o agendamento existir, buscamos o nome do barbeiro manualmente para não dar erro 400
-let barberName = "Barbeiro";
-if (nextAppt) {
-  const { data: barberProfile } = await supabase
-    .from("profiles")
-    .select("full_name")
-    .eq("id", (nextAppt as any).barber_id)
-    .single();
-  barberName = barberProfile?.full_name || "Barbeiro";
-}
-
-      // 3. Calcular progresso
-      const cortesAtuais = (client.total_cortes || 0) % FIDELITY_CONFIG.cortes_para_beneficio;
-      
-      // 4. Buscar último serviço
-      const ultimoServico = await this.getLastService(whatsapp, barbershopId);
-
-      return {
-        client: { ...client, ultimo_servico: ultimoServico || undefined },
-        proximo_agendamento: nextAppt ? {
-          id: nextAppt.id,
-          date: nextAppt.appointment_date,
-          time: nextAppt.appointment_time,
-          service_name: (nextAppt.services as any)?.name || "Serviço",
-          barber_name: barberName,
-          price: nextAppt.price,
-          status: nextAppt.status // Adicionado status para o badge
-        } : null,
-        progresso_fidelidade: {
-          cortes_atuais: cortesAtuais,
-          cortes_necessarios: FIDELITY_CONFIG.cortes_para_beneficio,
-          progresso_percentual: (cortesAtuais / FIDELITY_CONFIG.cortes_para_beneficio) * 100,
-        },
-        cupom_aniversario: null // Mantive nulo para simplificar, mas sua lógica original funciona
-      };
-    } catch (error) {
-      console.error("Error loading client dashboard:", error);
-      return null;
-    }
-  }
-
-  // ============================================
-  // LISTAR CLIENTES (Para Owners)
-  // ============================================
+  /**
+   * Lista clientes com métricas
+   */
   static async listClients(
     barbershopId: string,
-    filters?: ClientFilters
+    filters: ClientFilters = {}
   ): Promise<ClientWithMetrics[]> {
     try {
       let query = supabase
@@ -248,162 +124,266 @@ if (nextAppt) {
         .select("*")
         .eq("barbershop_id", barbershopId);
 
-      // Filtro: busca por nome/whatsapp
-      if (filters?.search) {
-        query = query.or(`nome.ilike.%${filters.search}%,whatsapp.ilike.%${filters.search}%`);
-      }
-
-      // Filtro: inativos (30+ dias)
-      if (filters?.inativos) {
-        const cutoffDate = new Date();
-        cutoffDate.setDate(cutoffDate.getDate() - 30);
-        query = query.or(`data_ultimo_corte.lt.${cutoffDate.toISOString()},data_ultimo_corte.is.null`);
-      }
-
-      // Filtro: aniversariantes do mês
-      if (filters?.aniversariantes) {
-        const mesAtual = new Date().getMonth() + 1;
-        // Nota: Isso pode precisar de ajuste dependendo do DB
-        query = query.not("data_nascimento", "is", null);
+      // Aplicar filtro de busca
+      if (filters.search) {
+        query = query.or(
+          `nome.ilike.%${filters.search}%,whatsapp.ilike.%${filters.search}%`
+        );
       }
 
       // Ordenação
-      if (filters?.sortBy) {
-        query = query.order(filters.sortBy, {
-          ascending: filters.sortOrder === "asc",
-        });
-      } else {
-        query = query.order("created_at", { ascending: false });
-      }
+      const sortBy = filters.sortBy || "nome";
+      const sortOrder = filters.sortOrder || "asc";
+      query = query.order(sortBy, { ascending: sortOrder === "asc" });
 
-      const { data, error } = await query;
+      const { data: clients, error } = await query;
 
       if (error) throw error;
+      if (!clients) return [];
 
-      // Processar métricas adicionais
-      const hoje = new Date();
-      const mesAtual = hoje.getMonth();
+      const today = startOfDay(new Date());
+      const currentMonth = new Date().getMonth();
 
-      return (data || []).map((client) => {
-        const metrics: ClientWithMetrics = { ...client };
-
-        // Calcular dias sem corte
+      // Processar métricas
+      const clientsWithMetrics: ClientWithMetrics[] = clients.map((client) => {
+        let dias_sem_corte: number | undefined;
+        
         if (client.data_ultimo_corte) {
-          const ultimoCorte = new Date(client.data_ultimo_corte);
-          metrics.dias_sem_corte = Math.floor(
-            (hoje.getTime() - ultimoCorte.getTime()) / (1000 * 60 * 60 * 24)
-          );
+          // ✅ CORREÇÃO: Usar startOfDay para ambas as datas para comparação justa
+          const lastCutDate = startOfDay(parseISO(client.data_ultimo_corte));
+          dias_sem_corte = differenceInDays(today, lastCutDate);
         }
 
-        // Calcular próximo benefício
-        metrics.proximo_beneficio =
-          FIDELITY_CONFIG.cortes_para_beneficio -
-          (client.total_cortes % FIDELITY_CONFIG.cortes_para_beneficio);
+        const proximo_beneficio = client.total_cortes
+          ? 10 - (client.total_cortes % 10)
+          : 10;
 
-        // Verificar aniversariante
+        let is_aniversariante = false;
         if (client.data_nascimento) {
-          const nascimento = new Date(client.data_nascimento);
-          metrics.is_aniversariante = nascimento.getMonth() === mesAtual;
+          const birthDate = parseISO(client.data_nascimento);
+          is_aniversariante = birthDate.getMonth() === currentMonth;
         }
 
-        return metrics;
+        return {
+          ...client,
+          dias_sem_corte,
+          proximo_beneficio,
+          is_aniversariante,
+        };
       });
+
+      // Aplicar filtros adicionais
+      let filtered = clientsWithMetrics;
+
+      if (filters.inativos) {
+        filtered = filtered.filter(
+          (c) => c.dias_sem_corte !== undefined && c.dias_sem_corte > 30
+        );
+      }
+
+      if (filters.aniversariantes) {
+        filtered = filtered.filter((c) => c.is_aniversariante);
+      }
+
+      return filtered;
     } catch (error) {
-      console.error("Error listing clients:", error);
+      console.error("Error in listClients:", error);
       return [];
     }
   }
 
-  // ============================================
-  // ESTATÍSTICAS DE CLIENTES
-  // ============================================
+  /**
+   * Busca estatísticas gerais dos clientes
+   */
   static async getClientStats(barbershopId: string) {
     try {
-      const { data: clients } = await supabase
+      const { data: clients, error } = await supabase
         .from("clients")
-        .select("data_ultimo_corte, data_nascimento")
+        .select("*")
         .eq("barbershop_id", barbershopId);
 
+      if (error) throw error;
       if (!clients) return null;
 
-      const hoje = new Date();
-      const mesAtual = hoje.getMonth();
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - 30);
+      const today = startOfDay(new Date());
+      const currentMonth = new Date().getMonth();
 
-      const stats = {
+      // ✅ CORREÇÃO: Usar startOfDay para cálculo consistente
+      const clientes_ativos = clients.filter((c) => {
+        if (!c.data_ultimo_corte) return false;
+        const lastCutDate = startOfDay(parseISO(c.data_ultimo_corte));
+        const daysSince = differenceInDays(today, lastCutDate);
+        return daysSince <= 30;
+      }).length;
+
+      const clientes_inativos = clients.filter((c) => {
+        if (!c.data_ultimo_corte) return true;
+        const lastCutDate = startOfDay(parseISO(c.data_ultimo_corte));
+        const daysSince = differenceInDays(today, lastCutDate);
+        return daysSince > 30;
+      }).length;
+
+      const aniversariantes_mes = clients.filter((c) => {
+        if (!c.data_nascimento) return false;
+        const birthDate = parseISO(c.data_nascimento);
+        return birthDate.getMonth() === currentMonth;
+      }).length;
+
+      return {
         total_clientes: clients.length,
-        clientes_ativos: clients.filter(
-          (c) => c.data_ultimo_corte && new Date(c.data_ultimo_corte) >= cutoffDate
-        ).length,
-        clientes_inativos: clients.filter(
-          (c) => !c.data_ultimo_corte || new Date(c.data_ultimo_corte) < cutoffDate
-        ).length,
-        aniversariantes_mes: clients.filter(
-          (c) =>
-            c.data_nascimento &&
-            new Date(c.data_nascimento).getMonth() === mesAtual
-        ).length,
+        clientes_ativos,
+        clientes_inativos,
+        aniversariantes_mes,
       };
-
-      return stats;
     } catch (error) {
-      console.error("Error getting client stats:", error);
+      console.error("Error in getClientStats:", error);
       return null;
     }
   }
-}
 
-// ============================================
-// INTEGRAÇÃO COM WhatsApp (Placeholder)
-// ============================================
-export class WhatsAppService {
   /**
-   * Envia código OTP via WhatsApp
-   * TODO: Integrar com Twilio, MessageBird ou similar
+   * Busca dados do dashboard do cliente
    */
-  static async sendOTP(whatsapp: string, code: string): Promise<boolean> {
-    console.log(`📱 [WhatsApp] Enviando OTP ${code} para ${whatsapp}`);
-    
-    // TODO: Implementar integração real
-    // Exemplo com Twilio:
-    // const client = twilio(ACCOUNT_SID, AUTH_TOKEN);
-    // await client.messages.create({
-    //   body: `Seu código de verificação é: ${code}`,
-    //   from: 'whatsapp:+14155238886',
-    //   to: `whatsapp:${whatsapp}`
-    // });
-    
-    return true;
+  static async getClientDashboard(
+    whatsapp: string,
+    barbershopId: string
+  ): Promise<ClientDashboardData | null> {
+    try {
+      // Buscar cliente
+      const { data: client, error: clientError } = await supabase
+        .from("clients")
+        .select("*")
+        .eq("barbershop_id", barbershopId)
+        .eq("whatsapp", whatsapp)
+        .maybeSingle();
+
+      if (clientError) throw clientError;
+      if (!client) return null;
+
+      // ✅ CORREÇÃO: Calcular dias_sem_corte com startOfDay
+      let dias_sem_corte: number | undefined;
+      if (client.data_ultimo_corte) {
+        const today = startOfDay(new Date());
+        const lastCutDate = startOfDay(parseISO(client.data_ultimo_corte));
+        dias_sem_corte = differenceInDays(today, lastCutDate);
+      }
+
+      const clientWithMetrics: ClientWithMetrics = {
+        ...client,
+        dias_sem_corte,
+      };
+
+      // Buscar próximo agendamento (sem join complexo)
+      const { data: nextAppointment } = await supabase
+        .from("appointments")
+        .select("id, appointment_date, appointment_time, price, status, service_id, barber_id")
+        .eq("client_whatsapp", whatsapp)
+        .in("status", ["pending", "confirmed"])
+        .gte("appointment_date", new Date().toISOString().split("T")[0])
+        .order("appointment_date", { ascending: true })
+        .order("appointment_time", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      let proximo_agendamento = null;
+
+      if (nextAppointment) {
+        // Buscar dados do serviço separadamente
+        const { data: service } = await supabase
+          .from("services")
+          .select("name")
+          .eq("id", nextAppointment.service_id)
+          .single();
+
+        // Buscar dados do barbeiro separadamente
+        const { data: barber } = await supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("id", nextAppointment.barber_id)
+          .single();
+
+        proximo_agendamento = {
+          id: nextAppointment.id,
+          date: nextAppointment.appointment_date,
+          time: nextAppointment.appointment_time,
+          service_name: service?.name || "Serviço",
+          barber_name: barber?.full_name || "Barbeiro",
+          price: nextAppointment.price,
+          status: nextAppointment.status,
+        };
+      }
+
+      // Progresso de fidelidade (10 cortes = 1 grátis)
+      const cortes_atuais = client.total_cortes % 10;
+      const cortes_necessarios = 10;
+      const progresso_percentual = (cortes_atuais / cortes_necessarios) * 100;
+
+      // Cupom de aniversário
+      let cupom_aniversario = null;
+      if (client.data_nascimento) {
+        const today = new Date();
+        const birthDate = parseISO(client.data_nascimento);
+        const isCurrentMonth = birthDate.getMonth() === today.getMonth();
+
+        if (isCurrentMonth) {
+          const endOfMonth = new Date(
+            today.getFullYear(),
+            today.getMonth() + 1,
+            0
+          );
+          cupom_aniversario = {
+            ativo: true,
+            desconto: 20,
+            valido_ate: endOfMonth.toISOString(),
+          };
+        }
+      }
+
+      return {
+        client: clientWithMetrics,
+        proximo_agendamento,
+        progresso_fidelidade: {
+          cortes_atuais,
+          cortes_necessarios,
+          progresso_percentual,
+        },
+        cupom_aniversario,
+      };
+    } catch (error) {
+      console.error("Error in getClientDashboard:", error);
+      return null;
+    }
   }
 
   /**
-   * Envia notificação de agendamento
+   * Cancela um agendamento
+   */
+  static async cancelAppointment(appointmentId: string) {
+    return await supabase
+      .from("appointments")
+      .update({ status: "cancelled" })
+      .eq("id", appointmentId);
+  }
+}
+
+export class WhatsAppService {
+  /**
+   * Envia confirmação de agendamento via WhatsApp (simulado)
    */
   static async sendAppointmentConfirmation(
     whatsapp: string,
-    appointmentDetails: {
+    data: {
       service: string;
       date: string;
       time: string;
       barber: string;
     }
-  ): Promise<boolean> {
-    console.log(`📱 [WhatsApp] Enviando confirmação para ${whatsapp}`, appointmentDetails);
-    // TODO: Implementar
-    return true;
-  }
-
-  /**
-   * Envia cupom de aniversário
-   */
-  static async sendBirthdayCoupon(
-    whatsapp: string,
-    clientName: string,
-    discount: number
-  ): Promise<boolean> {
-    console.log(`🎂 [WhatsApp] Enviando cupom de aniversário para ${clientName} (${whatsapp})`);
-    // TODO: Implementar
-    return true;
+  ): Promise<void> {
+    // Em produção, aqui você integraria com a API do WhatsApp
+    console.log("📱 Enviando confirmação para:", whatsapp);
+    console.log("📅 Agendamento:", data);
+    
+    // Simulação de envio bem-sucedido
+    return Promise.resolve();
   }
 }

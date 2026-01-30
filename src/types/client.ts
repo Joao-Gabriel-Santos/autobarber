@@ -1,5 +1,3 @@
-// src/types/client.ts
-
 export interface Client {
   id: string;
   barbershop_id: string;

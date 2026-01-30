@@ -5,15 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Calendar } from "@/components/ui/calendar";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { format, addDays } from "date-fns";
+import { format, addDays, isSameDay, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { parsePhoneNumberFromString, CountryCode } from 'libphonenumber-js';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ClientService, WhatsAppService } from "@/services/clientService";
-import { Repeat, MessageCircle, User } from "lucide-react";
+import { Repeat, MessageCircle, ShoppingCart, Trash2, Plus, Check } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 interface Service {
   id: string;
@@ -21,6 +20,10 @@ interface Service {
   price: number;
   duration: number;
   image_url: string | null;
+}
+
+interface CartItem extends Service {
+  quantity: number;
 }
 
 interface Barber {
@@ -50,13 +53,9 @@ interface BarbershopData {
   banner_url: string | null;
   owner_accepts_appointments: boolean;
   whatsapp_number: string | null;
-}
-
-interface LastServiceData {
-  service_id: string;
-  service_name: string;
-  barber_id: string;
-  barber_name: string;
+  banner_zoom: number | null;
+  banner_position_x: number | null;
+  banner_position_y: number | null;
 }
 
 const BookAppointment = () => {
@@ -67,15 +66,16 @@ const BookAppointment = () => {
   
   const [loading, setLoading] = useState(true);
   const [services, setServices] = useState<Service[]>([]);
+  const [cart, setCart] = useState<CartItem[]>([]);
   const [barbers, setBarbers] = useState<Barber[]>([]);
   const [workingHours, setWorkingHours] = useState<WorkingHour[]>([]);
   const [breaks, setBreaks] = useState<Break[]>([]);
   
-  const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedBarber, setSelectedBarber] = useState<Barber | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>();
   const [selectedTime, setSelectedTime] = useState<string>("");
   const [availableTimes, setAvailableTimes] = useState<string[]>([]);
+  const [availableDates, setAvailableDates] = useState<Date[]>([]);
   
   const [clientName, setClientName] = useState("");
   const [clientWhatsapp, setClientWhatsapp] = useState("");
@@ -87,6 +87,17 @@ const BookAppointment = () => {
   const [isReturningClient, setIsReturningClient] = useState(false);
   const [lastService, setLastService] = useState<any>(null);
   const [clientDataLoaded, setClientDataLoaded] = useState(false);
+
+  // Gerar próximos 8 dias
+  useEffect(() => {
+    const today = startOfDay(new Date());
+    const dates: Date[] = [];
+    for (let i = 0; i < 8; i++) {
+      dates.push(addDays(today, i));
+    }
+    setAvailableDates(dates);
+    setSelectedDate(dates[0]); // Selecionar hoje por padrão
+  }, []);
 
   useEffect(() => {
     loadBarbershopData();
@@ -100,13 +111,71 @@ const BookAppointment = () => {
   }, [ownerId, searchParams]);
 
   useEffect(() => {
-    if (selectedDate && selectedService && selectedBarber) {
+    if (selectedDate && cart.length > 0 && selectedBarber) {
       generateAvailableTimes();
     }
-  }, [selectedDate, selectedService, selectedBarber]);
+  }, [selectedDate, cart, selectedBarber]);
+
+  // Funções do carrinho
+  const addToCart = (service: Service) => {
+    const existingItem = cart.find(item => item.id === service.id);
+    
+    if (existingItem) {
+      // Incrementar quantidade
+      setCart(cart.map(item => 
+        item.id === service.id 
+          ? { ...item, quantity: item.quantity + 1 }
+          : item
+      ));
+    } else {
+      // Adicionar novo item
+      setCart([...cart, { ...service, quantity: 1 }]);
+    }
+
+    toast({
+      title: "Adicionado ao carrinho!",
+      description: service.name,
+    });
+  };
+
+  const removeFromCart = (serviceId: string) => {
+    const item = cart.find(i => i.id === serviceId);
+    
+    if (item && item.quantity > 1) {
+      // Decrementar quantidade
+      setCart(cart.map(i => 
+        i.id === serviceId 
+          ? { ...i, quantity: i.quantity - 1 }
+          : i
+      ));
+    } else {
+      // Remover completamente
+      setCart(cart.filter(i => i.id !== serviceId));
+    }
+  };
+
+  const clearCart = () => {
+    setCart([]);
+  };
+
+  const getTotalPrice = () => {
+    return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
+  };
+
+  const getTotalDuration = () => {
+    return cart.reduce((total, item) => total + (item.duration * item.quantity), 0);
+  };
+
+  const isInCart = (serviceId: string) => {
+    return cart.some(item => item.id === serviceId);
+  };
+
+  const getCartQuantity = (serviceId: string) => {
+    return cart.find(item => item.id === serviceId)?.quantity || 0;
+  };
 
   const loadClientData = async (whatsapp: string) => {
-    if (clientDataLoaded) return; // Evitar múltiplas chamadas
+    if (clientDataLoaded) return;
 
     const phoneCheck = validateAndNormalize(whatsapp);
     if (!phoneCheck.valid) return;
@@ -121,12 +190,11 @@ const BookAppointment = () => {
 
       if (client) {
         setClientName(client.nome);
-        setClientWhatsapp(whatsapp); // Manter formato original
+        setClientWhatsapp(whatsapp);
         setClientBirthday(client.data_nascimento || "");
         setIsReturningClient(true);
         setClientDataLoaded(true);
 
-        // Buscar último serviço
         const lastSvc = await ClientService.getLastService(phoneCheck.e164, ownerId);
         if (lastSvc) {
           setLastService(lastSvc);
@@ -152,19 +220,13 @@ const BookAppointment = () => {
       return;
     }
 
-    // Remove caracteres não numéricos do número
     let cleanNumber = barbershopInfo.whatsapp_number.replace(/\D/g, '');
-
     if (cleanNumber.length <= 11) {
-    cleanNumber = `55${cleanNumber}`;}
+      cleanNumber = `55${cleanNumber}`;
+    }
     
-    // Cria a mensagem padrão
     const message = encodeURIComponent(`Olá! Gostaria de mais informações sobre os serviços da ${barbershopInfo.name}.`);
-    
-    // Cria o link do WhatsApp
     const whatsappUrl = `https://wa.me/${cleanNumber}?text=${message}`;
-    
-    // Abre em nova aba
     window.open(whatsappUrl, '_blank');
   };
 
@@ -192,15 +254,11 @@ const BookAppointment = () => {
     }
 
     try {
-      console.log("Searching for slug:", barberSlug);
-      
       const { data: directData, error: directError } = await supabase
         .from("barbershops")
         .select("*")
         .eq("slug", barberSlug)
         .maybeSingle();
-
-      console.log("Direct query result:", { directData, directError });
 
       if (directError || !directData) {
         toast({
@@ -228,7 +286,10 @@ const BookAppointment = () => {
         full_name: profile?.full_name || null,
         slug: directData.slug,
         owner_accepts_appointments: directData.owner_accepts_appointments || false,
-        whatsapp: profile?.whatsapp || null
+        whatsapp: profile?.whatsapp || null,
+        banner_zoom: directData.banner_zoom || 100,
+        banner_position_x: directData.banner_position_x || 50,
+        banner_position_y: directData.banner_position_y || 50,
       };
       
       setOwnerId(barbershopData.barber_id);
@@ -251,7 +312,10 @@ const BookAppointment = () => {
         avatar_url: avatarUrl,
         banner_url: bannerUrl,
         owner_accepts_appointments: barbershopData.owner_accepts_appointments,
-        whatsapp_number: barbershopData.whatsapp
+        whatsapp_number: barbershopData.whatsapp,
+        banner_zoom: barbershopData.banner_zoom,
+        banner_position_x: barbershopData.banner_position_x,
+        banner_position_y: barbershopData.banner_position_y,
       });
 
       const { data: servicesData, error: servicesError } = await supabase
@@ -362,7 +426,7 @@ const BookAppointment = () => {
   };
 
   const generateAvailableTimes = async () => {
-    if (!selectedDate || !selectedService || !selectedBarber) return;
+    if (!selectedDate || cart.length === 0 || !selectedBarber) return;
 
     const dayOfWeek = selectedDate.getDay();
     const workingHour = workingHours.find(wh => wh.day_of_week === dayOfWeek);
@@ -397,16 +461,16 @@ const BookAppointment = () => {
 
     let currentTime = startHour * 60 + startMinute;
     const endTime = endHour * 60 + endMinute;
-    const serviceDuration = selectedService.duration;
+    const totalDuration = getTotalDuration();
 
-    while (currentTime + serviceDuration <= endTime) {
+    while (currentTime + totalDuration <= endTime) {
       const hour = Math.floor(currentTime / 60);
       const minute = currentTime % 60;
       const timeSlot = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
       
       let isAvailable = true;
       
-      for (let i = 0; i < serviceDuration; i++) {
+      for (let i = 0; i < totalDuration; i++) {
         const checkTime = currentTime + i;
         
         if (occupiedMinutes.has(checkTime)) {
@@ -424,7 +488,7 @@ const BookAppointment = () => {
         times.push(timeSlot);
       }
       
-      currentTime += serviceDuration;
+      currentTime += 15; // Incrementar de 15 em 15 minutos
     }
 
     setAvailableTimes(times);
@@ -450,7 +514,6 @@ const BookAppointment = () => {
     return times;
   };
 
-  // ✨ VERIFICAR SE É CLIENTE RECORRENTE
   const checkReturningClient = async (whatsapp: string) => {
     if (!ownerId || !whatsapp) return;
     
@@ -473,14 +536,16 @@ const BookAppointment = () => {
     }
   };
 
-  // ✨ USAR ÚLTIMO SERVIÇO
   const useLastService = () => {
     if (!lastService) return;
     
     const service = services.find(s => s.id === lastService.service_id);
     const barber = barbers.find(b => b.id === lastService.barber_id);
     
-    if (service) setSelectedService(service);
+    if (service) {
+      clearCart();
+      addToCart(service);
+    }
     if (barber) setSelectedBarber(barber);
     
     toast({
@@ -489,9 +554,8 @@ const BookAppointment = () => {
     });
   };
 
-  // ✨ AGENDAMENTO COM CADASTRO INVISÍVEL
   const handleBooking = async () => {
-    if (!selectedService || !selectedDate || !selectedTime || !clientName || !clientWhatsapp || !selectedBarber) {
+    if (cart.length === 0 || !selectedDate || !selectedTime || !clientName || !clientWhatsapp || !selectedBarber) {
       toast({
         title: "Preencha todos os campos",
         variant: "destructive",
@@ -511,9 +575,6 @@ const BookAppointment = () => {
     const normalizedWhatsapp = phoneCheck.e164;
 
     try {
-      // ============================================
-      // ETAPA 1: CADASTRO INVISÍVEL DO CLIENTE
-      // ============================================
       const client = await ClientService.upsertClient(
         ownerId,
         normalizedWhatsapp,
@@ -525,34 +586,49 @@ const BookAppointment = () => {
         throw new Error("Erro ao registrar cliente");
       }
 
-      // ============================================
-      // ETAPA 2: CRIAR AGENDAMENTO
-      // ============================================
-      const { data: appointment, error } = await supabase
-        .from("appointments")
-        .insert({
-          barber_id: selectedBarber.id,
-          service_id: selectedService.id,
-          appointment_date: format(selectedDate, "yyyy-MM-dd"),
-          appointment_time: selectedTime,
-          client_name: clientName,
-          client_whatsapp: normalizedWhatsapp,
-          price: selectedService.price,
-          status: "confirmed",
-          client_id: client.id,
-        })
-        .select()
-        .single();
+      // Criar agendamento para cada serviço no carrinho
+      let currentTime = selectedTime;
+      const appointmentIds: string[] = [];
 
-      if (error) throw error;
+      for (const item of cart) {
+        for (let i = 0; i < item.quantity; i++) {
+          const { data: appointment, error } = await supabase
+            .from("appointments")
+            .insert({
+              barber_id: selectedBarber.id,
+              service_id: item.id,
+              appointment_date: format(selectedDate, "yyyy-MM-dd"),
+              appointment_time: currentTime,
+              client_name: clientName,
+              client_whatsapp: normalizedWhatsapp,
+              price: item.price,
+              status: "confirmed",
+              client_id: client.id,
+            })
+            .select()
+            .single();
 
-      // ============================================
-      // ETAPA 3: ENVIAR CONFIRMAÇÃO VIA WHATSAPP
-      // ============================================
+          if (error) throw error;
+          
+          appointmentIds.push(appointment.id);
+
+          // Calcular próximo horário
+          const [hour, minute] = currentTime.split(':').map(Number);
+          const totalMinutes = hour * 60 + minute + item.duration;
+          const nextHour = Math.floor(totalMinutes / 60);
+          const nextMinute = totalMinutes % 60;
+          currentTime = `${nextHour.toString().padStart(2, '0')}:${nextMinute.toString().padStart(2, '0')}`;
+        }
+      }
+
+      const servicesNames = cart.map(item => 
+        item.quantity > 1 ? `${item.quantity}x ${item.name}` : item.name
+      ).join(', ');
+
       await WhatsAppService.sendAppointmentConfirmation(
         normalizedWhatsapp,
         {
-          service: selectedService.name,
+          service: servicesNames,
           date: format(selectedDate, "dd/MM/yyyy", { locale: ptBR }),
           time: selectedTime,
           barber: selectedBarber.full_name,
@@ -561,30 +637,23 @@ const BookAppointment = () => {
 
       toast({
         title: "✅ Agendamento confirmado!",
-        description: `${clientName}, seu horário foi confirmado. Você receberá uma confirmação no WhatsApp.`,
+        description: `${clientName}, seus ${cart.length} serviço(s) foram confirmados!`,
       });
 
-      setSelectedService(null);
+      clearCart();
       setSelectedBarber(null);
-      setSelectedDate(undefined);
+      setSelectedDate(availableDates[0]);
       setSelectedTime("");
       setClientName("");
       setClientWhatsapp("");
 
-      // 1. Garanta que o número não tenha caracteres estranhos
-const cleanWhatsapp = clientWhatsapp.replace(/\D/g, ''); // Remove tudo que não é número
+      const cleanWhatsapp = clientWhatsapp.replace(/\D/g, '');
+      const fullWhatsapp = `+55${cleanWhatsapp}`;
+      const dashboardUrl = `/client-dashboard?whatsapp=${encodeURIComponent(fullWhatsapp)}&barbershop_id=${ownerId}&barbershop_slug=${barberSlug}`;
 
-// 2. Monte a string completa do WhatsApp (DDI + Número)
-const fullWhatsapp = `+55${cleanWhatsapp}`;
-
-// 3. Use o encode apenas na string FINAL completa
-const dashboardUrl = `/client-dashboard?whatsapp=${encodeURIComponent(fullWhatsapp)}&barbershop_id=${ownerId}&barbershop_slug=${barberSlug}`;
-
-// 4. No iOS, o window.location.href funciona melhor sem o setTimeout longo, 
-// mas se quiser manter o feedback do agendamento, reduza para 1500ms
-setTimeout(() => {
-  window.location.assign(dashboardUrl); // .assign é mais robusto que .href em alguns navegadores mobile
-}, 1500);
+      setTimeout(() => {
+        window.location.assign(dashboardUrl);
+      }, 1500);
 
     } catch (error: any) {
       toast({
@@ -595,22 +664,13 @@ setTimeout(() => {
     }
   };
 
-  const disabledDays = (date: Date) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const maxDate = addDays(today, 7);
-    maxDate.setHours(23, 59, 59, 999);
-
-    const isPast = date < today;
-    const isTooFarInFuture = date > maxDate;
-    
-    if (!selectedBarber) return isPast || isTooFarInFuture;
+  const isDayDisabled = (date: Date) => {
+    if (!selectedBarber) return true;
     
     const dayOfWeek = date.getDay();
     const barberWorksThisDay = workingHours.some(wh => wh.day_of_week === dayOfWeek);
-
-    return isPast || isTooFarInFuture || !barberWorksThisDay;
+    
+    return !barberWorksThisDay;
   };
 
   if (loading) {
@@ -641,14 +701,18 @@ setTimeout(() => {
 
   return (
     <div className="min-h-screen bg-gradient-dark">
-      {/* Header */}
+      {/* Header com Banner */}
       <header className="relative border-b border-border">
         {barbershopInfo.banner_url && (
-          <div className="h-48 overflow-hidden">
-            <img 
-              src={barbershopInfo.banner_url} 
-              alt="Banner da barbearia" 
-              className="w-full h-full object-cover"
+          <div className="h-48 overflow-hidden relative">
+            <div
+              className="w-full h-full"
+              style={{
+                backgroundImage: `url(${barbershopInfo.banner_url})`,
+                backgroundSize: `${barbershopInfo.banner_zoom}%`,
+                backgroundPosition: `${barbershopInfo.banner_position_x}% ${barbershopInfo.banner_position_y}%`,
+                backgroundRepeat: 'no-repeat',
+              }}
             />
           </div>
         )}
@@ -670,7 +734,7 @@ setTimeout(() => {
             {barbershopInfo.name}
           </h1>
           <p className="text-muted-foreground mb-4">
-            Faça seu agendamento
+            Escolha seus serviços e horário
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
             <Button 
@@ -696,9 +760,9 @@ setTimeout(() => {
 
       <main className="container mx-auto px-4 py-8 max-w-6xl">
         <div className="grid lg:grid-cols-2 gap-8">
-          {/* Services and Barber Selection */}
+          {/* Coluna Esquerda: Serviços e Barbeiros */}
           <div className="space-y-6">
-            {/* Barber Selection */}
+            {/* Seleção de Barbeiro */}
             {showBarberSelector && (
               <div>
                 <h2 className="text-2xl font-bold mb-4">Escolha o Barbeiro</h2>
@@ -731,48 +795,134 @@ setTimeout(() => {
               </div>
             )}
 
-            {/* Service Selection */}
+            {/* Catálogo de Serviços */}
             <div>
-              <h2 className="text-2xl font-bold mb-4">Escolha o Serviço</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-2xl font-bold">Serviços Disponíveis</h2>
+                {cart.length > 0 && (
+                  <Badge variant="default" className="text-lg px-3 py-1">
+                    <ShoppingCart className="h-4 w-4 mr-1" />
+                    {cart.reduce((sum, item) => sum + item.quantity, 0)}
+                  </Badge>
+                )}
+              </div>
               <div className="space-y-4">
-                {services.map((service) => (
-                  <Card
-                    key={service.id}
-                    className={`p-4 cursor-pointer transition-all border-2 ${
-                      selectedService?.id === service.id
-                        ? "border-primary bg-primary/5"
-                        : "border-border bg-card hover:border-primary/50"
-                    }`}
-                    onClick={() => setSelectedService(service)}
-                  >
-                    <div className="flex gap-4">
-                      {service.image_url && (
-                        <img
-                          src={service.image_url}
-                          alt={service.name}
-                          className="w-20 h-20 object-cover rounded-lg"
-                        />
-                      )}
-                      <div className="flex-1">
-                        <h3 className="font-bold text-lg">{service.name}</h3>
-                        <p className="text-sm text-muted-foreground">
-                          {service.duration} minutos
-                        </p>
-                        <p className="text-lg font-bold text-primary">
-                          R$ {service.price.toFixed(2)}
-                        </p>
+                {services.map((service) => {
+                  const inCart = isInCart(service.id);
+                  const quantity = getCartQuantity(service.id);
+                  
+                  return (
+                    <Card
+                      key={service.id}
+                      className={`p-4 transition-all border-2 ${
+                        inCart
+                          ? "border-primary bg-primary/5"
+                          : "border-border bg-card hover:border-primary/50"
+                      }`}
+                    >
+                      <div className="flex gap-4">
+                        {service.image_url && (
+                          <img
+                            src={service.image_url}
+                            alt={service.name}
+                            className="w-20 h-20 object-cover rounded-lg"
+                          />
+                        )}
+                        <div className="flex-1">
+                          <h3 className="font-bold text-lg">{service.name}</h3>
+                          <p className="text-sm text-muted-foreground">
+                            {service.duration} minutos
+                          </p>
+                          <p className="text-lg font-bold text-primary">
+                            R$ {service.price.toFixed(2)}
+                          </p>
+                        </div>
+                        <div className="flex flex-col gap-2 justify-center">
+                          {!inCart ? (
+                            <Button
+                              size="sm"
+                              onClick={() => addToCart(service)}
+                            >
+                              <Plus className="h-4 w-4 mr-1" />
+                              Adicionar
+                            </Button>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => removeFromCart(service.id)}
+                              >
+                                -
+                              </Button>
+                              <span className="font-bold min-w-[2ch] text-center">
+                                {quantity}
+                              </span>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => addToCart(service)}
+                              >
+                                +
+                              </Button>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </Card>
-                ))}
+                    </Card>
+                  );
+                })}
               </div>
             </div>
           </div>
 
-          {/* Booking Form */}
-          <div>
-            <h2 className="text-2xl font-bold mb-4">Dados do Agendamento</h2>
+          {/* Coluna Direita: Resumo e Agendamento */}
+          <div className="space-y-6">
+            {/* Resumo do Carrinho */}
+            {cart.length > 0 && (
+              <Card className="p-6 border-border bg-card">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold">Resumo do Pedido</h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearCart}
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Limpar
+                  </Button>
+                </div>
+
+                <div className="space-y-3 mb-4">
+                  {cart.map((item) => (
+                    <div key={item.id} className="flex justify-between text-sm">
+                      <span>
+                        {item.quantity}x {item.name}
+                      </span>
+                      <span className="font-semibold">
+                        R$ {(item.price * item.quantity).toFixed(2)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="border-t border-border pt-3 space-y-2">
+                  <div className="flex justify-between text-sm text-muted-foreground">
+                    <span>Duração total:</span>
+                    <span>{getTotalDuration()} minutos</span>
+                  </div>
+                  <div className="flex justify-between text-lg font-bold">
+                    <span>Total:</span>
+                    <span className="text-primary">R$ {getTotalPrice().toFixed(2)}</span>
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            {/* Formulário de Agendamento */}
             <Card className="p-6 border-border bg-card space-y-6">
+              <h2 className="text-2xl font-bold">Dados do Agendamento</h2>
+
               {!showBarberSelector && selectedBarber && (
                 <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
                   <p className="text-sm font-semibold text-primary">
@@ -789,7 +939,6 @@ setTimeout(() => {
                 </div>
               )}
 
-              {/* ✨ Botão "O de Sempre" */}
               {isReturningClient && lastService && (
                 <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
                   <Button
@@ -806,21 +955,50 @@ setTimeout(() => {
                 </div>
               )}
 
+              {/* Seletor de Data em Linha */}
               <div>
-                <Label>Data (próximos 8 dias)</Label>
-                <Calendar
-                  mode="single"
-                  selected={selectedDate}
-                  onSelect={setSelectedDate}
-                  disabled={disabledDays}
-                  locale={ptBR}
-                  className="rounded-md border border-border bg-background"
-                />
+                <Label className="mb-3 block">Escolha o Dia (próximos 8 dias)</Label>
+                <div className="grid grid-cols-4 gap-2">
+                  {availableDates.map((date, index) => {
+                    const isSelected = selectedDate && isSameDay(date, selectedDate);
+                    const isDisabled = isDayDisabled(date);
+                    const isToday = isSameDay(date, new Date());
+                    
+                    return (
+                      <Button
+                        key={index}
+                        variant={isSelected ? "default" : "outline"}
+                        size="lg"
+                        disabled={isDisabled}
+                        onClick={() => setSelectedDate(date)}
+                        className={`flex flex-col h-auto py-3 ${
+                          isDisabled ? "opacity-50 cursor-not-allowed" : ""
+                        }`}
+                      >
+                        <span className="text-xs uppercase">
+                          {format(date, "EEE", { locale: ptBR })}
+                        </span>
+                        <span className="text-2xl font-bold">
+                          {format(date, "dd", { locale: ptBR })}
+                        </span>
+                        <span className="text-xs">
+                          {format(date, "MMM", { locale: ptBR })}
+                        </span>
+                        {isToday && (
+                          <Badge variant="secondary" className="mt-1 text-[10px] py-0 px-1">
+                            Hoje
+                          </Badge>
+                        )}
+                      </Button>
+                    );
+                  })}
+                </div>
               </div>
 
-              {selectedDate && getFilteredTimes().length > 0 && (
+              {/* Horários Disponíveis */}
+              {selectedDate && cart.length > 0 && getFilteredTimes().length > 0 && (
                 <div>
-                  <Label>Horário</Label>
+                  <Label>Horário de Início</Label>
                   <div className="grid grid-cols-4 gap-2 mt-2">
                     {getFilteredTimes().map((time) => (
                       <Button
@@ -833,13 +1011,33 @@ setTimeout(() => {
                       </Button>
                     ))}
                   </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    ⏱️ Seus serviços terminarão às {
+                      (() => {
+                        if (!selectedTime) return "—";
+                        const [h, m] = selectedTime.split(':').map(Number);
+                        const totalMinutes = h * 60 + m + getTotalDuration();
+                        const endHour = Math.floor(totalMinutes / 60);
+                        const endMinute = totalMinutes % 60;
+                        return `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
+                      })()
+                    }
+                  </p>
                 </div>
               )}
 
-              {selectedDate && getFilteredTimes().length === 0 && (
+              {selectedDate && cart.length > 0 && getFilteredTimes().length === 0 && (
                 <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
                   <p className="text-sm text-yellow-600 dark:text-yellow-400">
-                    ⚠️ Não há horários disponíveis nesta data para este barbeiro.
+                    ⚠️ Não há horários disponíveis nesta data para este barbeiro com a duração total de {getTotalDuration()} minutos.
+                  </p>
+                </div>
+              )}
+
+              {cart.length === 0 && (
+                <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+                  <p className="text-sm text-blue-600 dark:text-blue-400">
+                    ℹ️ Adicione serviços ao carrinho para selecionar data e horário
                   </p>
                 </div>
               )}
@@ -865,10 +1063,9 @@ setTimeout(() => {
                 />
               </div>
 
-              {/* ✨ Data de Nascimento */}
               <div>
                 <Label htmlFor="birthday" className="flex items-center gap-2">
-                  Data de Nascimento *
+                  Data de Nascimento
                 </Label>
                 <Input
                   id="birthday"
@@ -885,9 +1082,10 @@ setTimeout(() => {
                 className="w-full"
                 size="lg"
                 onClick={handleBooking}
-                disabled={!selectedBarber || !selectedService || !selectedDate || !selectedTime || !clientName || !clientWhatsapp}
+                disabled={!selectedBarber || cart.length === 0 || !selectedDate || !selectedTime || !clientName || !clientWhatsapp}
               >
-                Confirmar Agendamento
+                <Check className="h-5 w-5 mr-2" />
+                Confirmar {cart.length} Serviço(s) - R$ {getTotalPrice().toFixed(2)}
               </Button>
             </Card>
           </div>

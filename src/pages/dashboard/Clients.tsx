@@ -4,30 +4,14 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { 
-  ArrowLeft,
-  Search,
-  Users,
-  Calendar,
-  TrendingUp,
-  Gift,
-  Filter,
-  Phone,
-  MessageCircle
-} from "lucide-react";
+import { ArrowLeft, Search, Users, Calendar, TrendingUp, Gift, Filter, Phone, MessageCircle } from "lucide-react";
 import { ClientService } from "@/services/clientService";
 import { ClientWithMetrics, ClientFilters } from "@/types/client";
 import { format, isValid } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const ClientsManagement = () => {
   const navigate = useNavigate();
