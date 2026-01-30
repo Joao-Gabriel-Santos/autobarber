@@ -1,4 +1,4 @@
-// src/App.tsx - ATUALIZADO COM ROTAS DE CLIENTES
+// src/App.tsx - CORRIGIDO COM TODAS AS ROTAS
 
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -26,9 +26,10 @@ import PaymentSuccess from "./pages/PaymentSuccess";
 import TeamManagement from "./pages/dashboard/TeamManagement";
 import AcceptInvite from "./pages/dashboard/AcceptInvite";
 
-// ✨ NOVAS PÁGINAS DE CLIENTES
+// Páginas de Clientes
 import ClientsManagement from "./pages/dashboard/Clients";
 import ClientDashboard from "./pages/ClientDashboard";
+import ClientAuth from "./pages/ClientAuth"; // ← Importação corrigida (sem @/)
 
 const queryClient = new QueryClient();
 
@@ -48,11 +49,11 @@ const App = () => (
           <Route path="/confirm-email" element={<ConfirmEmail />} />
           <Route path="/update-password" element={<UpdatePassword />} />
           
-          {/* Agendamento público */}
+          {/* 🔐 Rotas de Cliente - ORDEM IMPORTANTE */}
+          <Route path="/client-auth/:barberSlug" element={<ClientAuth />} />
+          {/* ⚠️ ADICIONAR ESTA ROTA ⚠️ */}
           <Route path="/book/:barberSlug" element={<BookAppointment />} />
           <Route path="/meus-agendamentos" element={<ClientAppointments />} />
-          
-          {/* ✨ Dashboard do Cliente (área logada) */}
           <Route path="/client-dashboard" element={<ClientDashboard />} />
           
           {/* Dashboard do Owner/Barbeiro */}
@@ -62,12 +63,9 @@ const App = () => (
           <Route path="/dashboard/appointments" element={<Appointments />} />
           <Route path="/dashboard/finance" element={<Finance />} />
           <Route path="/dashboard/team" element={<TeamManagement />} />
-          
-          {/* ✨ Gestão de Clientes (Owner apenas) */}
           <Route path="/dashboard/clients" element={<ClientsManagement />} />
-          
           <Route path="/settings" element={<Settings />} />
-          <Route path="/accept-invite/:token" element={<AcceptInvite />}/>
+          <Route path="/accept-invite/:token" element={<AcceptInvite />} />
           
           {/* Catch-all 404 */}
           <Route path="*" element={<NotFound />} />

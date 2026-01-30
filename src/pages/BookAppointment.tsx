@@ -11,7 +11,7 @@ import { ptBR } from "date-fns/locale";
 import { parsePhoneNumberFromString, CountryCode } from 'libphonenumber-js';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ClientService, WhatsAppService } from "@/services/clientService";
-import { Repeat, MessageCircle, ShoppingCart, Trash2, Plus, Check } from "lucide-react";
+import { Repeat, MessageCircle, ShoppingCart, Trash2, Plus, Check, LogOut } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface Service {
@@ -77,16 +77,18 @@ const BookAppointment = () => {
   const [availableTimes, setAvailableTimes] = useState<string[]>([]);
   const [availableDates, setAvailableDates] = useState<Date[]>([]);
   
+  // Dados do cliente (agora carregados automaticamente)
   const [clientName, setClientName] = useState("");
   const [clientWhatsapp, setClientWhatsapp] = useState("");
   const [clientBirthday, setClientBirthday] = useState("");
+  const [clientId, setClientId] = useState<string>("");
   
   const [barbershopInfo, setBarbershopInfo] = useState<BarbershopData | null>(null);
   const [ownerId, setOwnerId] = useState<string>("");
   
   const [isReturningClient, setIsReturningClient] = useState(false);
   const [lastService, setLastService] = useState<any>(null);
-  const [clientDataLoaded, setClientDataLoaded] = useState(false);
+  const [clientAuthenticated, setClientAuthenticated] = useState(false);
 
   // Gerar próximos 8 dias
   useEffect(() => {
@@ -96,7 +98,7 @@ const BookAppointment = () => {
       dates.push(addDays(today, i));
     }
     setAvailableDates(dates);
-    setSelectedDate(dates[0]); // Selecionar hoje por padrão
+    setSelectedDate(dates[0]);
   }, []);
 
   useEffect(() => {
@@ -107,8 +109,11 @@ const BookAppointment = () => {
     const whatsappParam = searchParams.get("whatsapp");
     if (whatsappParam && ownerId) {
       loadClientData(whatsappParam);
+    } else if (ownerId && !whatsappParam) {
+      // Sem whatsapp na URL, redirecionar para autenticação
+      navigate(`/client-auth/${barberSlug}`);
     }
-  }, [ownerId, searchParams]);
+  }, [ownerId, searchParams, barberSlug]);
 
   useEffect(() => {
     if (selectedDate && cart.length > 0 && selectedBarber) {
@@ -121,14 +126,12 @@ const BookAppointment = () => {
     const existingItem = cart.find(item => item.id === service.id);
     
     if (existingItem) {
-      // Incrementar quantidade
       setCart(cart.map(item => 
         item.id === service.id 
           ? { ...item, quantity: item.quantity + 1 }
           : item
       ));
     } else {
-      // Adicionar novo item
       setCart([...cart, { ...service, quantity: 1 }]);
     }
 
@@ -142,14 +145,12 @@ const BookAppointment = () => {
     const item = cart.find(i => i.id === serviceId);
     
     if (item && item.quantity > 1) {
-      // Decrementar quantidade
       setCart(cart.map(i => 
         i.id === serviceId 
           ? { ...i, quantity: i.quantity - 1 }
           : i
       ));
     } else {
-      // Remover completamente
       setCart(cart.filter(i => i.id !== serviceId));
     }
   };
@@ -175,10 +176,15 @@ const BookAppointment = () => {
   };
 
   const loadClientData = async (whatsapp: string) => {
-    if (clientDataLoaded) return;
-
     const phoneCheck = validateAndNormalize(whatsapp);
-    if (!phoneCheck.valid) return;
+    if (!phoneCheck.valid) {
+      toast({
+        title: "WhatsApp inválido",
+        variant: "destructive",
+      });
+      navigate(`/client-auth/${barberSlug}`);
+      return;
+    }
 
     try {
       const { data: client } = await supabase
@@ -188,26 +194,44 @@ const BookAppointment = () => {
         .eq("whatsapp", phoneCheck.e164)
         .maybeSingle();
 
-      if (client) {
-        setClientName(client.nome);
-        setClientWhatsapp(whatsapp);
-        setClientBirthday(client.data_nascimento || "");
-        setIsReturningClient(true);
-        setClientDataLoaded(true);
-
-        const lastSvc = await ClientService.getLastService(phoneCheck.e164, ownerId);
-        if (lastSvc) {
-          setLastService(lastSvc);
-        }
-
+      if (!client) {
         toast({
-          title: "Bem-vindo de volta! 👋",
-          description: `Olá ${client.nome}! Seus dados foram carregados automaticamente.`,
+          title: "Cliente não encontrado",
+          description: "Você precisa fazer login primeiro",
+          variant: "destructive",
         });
+        navigate(`/client-auth/${barberSlug}`);
+        return;
       }
+
+      setClientId(client.id);
+      setClientName(client.nome);
+      setClientWhatsapp(whatsapp);
+      setClientBirthday(client.data_nascimento || "");
+      setClientAuthenticated(true);
+
+      const lastSvc = await ClientService.getLastService(phoneCheck.e164, ownerId);
+      if (lastSvc) {
+        setLastService(lastSvc);
+        setIsReturningClient(true);
+      }
+
+      toast({
+        title: "Bem-vindo de volta! 👋",
+        description: `Olá ${client.nome}!`,
+      });
     } catch (error) {
       console.error("Error loading client data:", error);
+      navigate(`/client-auth/${barberSlug}`);
     }
+  };
+
+  const handleLogout = () => {
+    navigate(`/client-auth/${barberSlug}`);
+    toast({
+      title: "Sessão encerrada",
+      description: "Faça login novamente para agendar",
+    });
   };
 
   const handleWhatsAppClick = () => {
@@ -488,7 +512,7 @@ const BookAppointment = () => {
         times.push(timeSlot);
       }
       
-      currentTime += 15; // Incrementar de 15 em 15 minutos
+      currentTime += 15;
     }
 
     setAvailableTimes(times);
@@ -514,28 +538,6 @@ const BookAppointment = () => {
     return times;
   };
 
-  const checkReturningClient = async (whatsapp: string) => {
-    if (!ownerId || !whatsapp) return;
-    
-    const phoneCheck = validateAndNormalize(whatsapp);
-    if (!phoneCheck.valid) return;
-
-    const lastSvc = await ClientService.getLastService(phoneCheck.e164, ownerId);
-    
-    if (lastSvc) {
-      setIsReturningClient(true);
-      setLastService(lastSvc);
-      
-      toast({
-        title: "Bem-vindo de volta! 👋",
-        description: "Encontramos seu histórico. Use o botão 'O de Sempre' para agilizar.",
-      });
-    } else {
-      setIsReturningClient(false);
-      setLastService(null);
-    }
-  };
-
   const useLastService = () => {
     if (!lastService) return;
     
@@ -555,7 +557,16 @@ const BookAppointment = () => {
   };
 
   const handleBooking = async () => {
-    if (cart.length === 0 || !selectedDate || !selectedTime || !clientName || !clientWhatsapp || !selectedBarber) {
+    if (!clientAuthenticated) {
+      toast({
+        title: "Faça login primeiro",
+        variant: "destructive",
+      });
+      navigate(`/client-auth/${barberSlug}`);
+      return;
+    }
+
+    if (cart.length === 0 || !selectedDate || !selectedTime || !selectedBarber) {
       toast({
         title: "Preencha todos os campos",
         variant: "destructive",
@@ -563,30 +574,7 @@ const BookAppointment = () => {
       return;
     }
 
-    const phoneCheck = validateAndNormalize(clientWhatsapp);
-    if (!phoneCheck.valid) {
-      toast({
-        title: "WhatsApp inválido",
-        description: "Digite um número válido. Ex: (11) 98765-4321",
-        variant: "destructive",
-      });
-      return;
-    }
-    const normalizedWhatsapp = phoneCheck.e164;
-
     try {
-      const client = await ClientService.upsertClient(
-        ownerId,
-        normalizedWhatsapp,
-        clientName,
-        clientBirthday || undefined
-      );
-
-      if (!client) {
-        throw new Error("Erro ao registrar cliente");
-      }
-
-      // Criar agendamento para cada serviço no carrinho
       let currentTime = selectedTime;
       const appointmentIds: string[] = [];
 
@@ -600,10 +588,10 @@ const BookAppointment = () => {
               appointment_date: format(selectedDate, "yyyy-MM-dd"),
               appointment_time: currentTime,
               client_name: clientName,
-              client_whatsapp: normalizedWhatsapp,
+              client_whatsapp: clientWhatsapp,
               price: item.price,
               status: "confirmed",
-              client_id: client.id,
+              client_id: clientId,
             })
             .select()
             .single();
@@ -612,7 +600,6 @@ const BookAppointment = () => {
           
           appointmentIds.push(appointment.id);
 
-          // Calcular próximo horário
           const [hour, minute] = currentTime.split(':').map(Number);
           const totalMinutes = hour * 60 + minute + item.duration;
           const nextHour = Math.floor(totalMinutes / 60);
@@ -625,15 +612,18 @@ const BookAppointment = () => {
         item.quantity > 1 ? `${item.quantity}x ${item.name}` : item.name
       ).join(', ');
 
-      await WhatsAppService.sendAppointmentConfirmation(
-        normalizedWhatsapp,
-        {
-          service: servicesNames,
-          date: format(selectedDate, "dd/MM/yyyy", { locale: ptBR }),
-          time: selectedTime,
-          barber: selectedBarber.full_name,
-        }
-      );
+      const phoneCheck = validateAndNormalize(clientWhatsapp);
+      if (phoneCheck.valid) {
+        await WhatsAppService.sendAppointmentConfirmation(
+          phoneCheck.e164,
+          {
+            service: servicesNames,
+            date: format(selectedDate, "dd/MM/yyyy", { locale: ptBR }),
+            time: selectedTime,
+            barber: selectedBarber.full_name,
+          }
+        );
+      }
 
       toast({
         title: "✅ Agendamento confirmado!",
@@ -644,8 +634,6 @@ const BookAppointment = () => {
       setSelectedBarber(null);
       setSelectedDate(availableDates[0]);
       setSelectedTime("");
-      setClientName("");
-      setClientWhatsapp("");
 
       const cleanWhatsapp = clientWhatsapp.replace(/\D/g, '');
       const fullWhatsapp = `+55${cleanWhatsapp}`;
@@ -697,6 +685,17 @@ const BookAppointment = () => {
     );
   }
 
+  if (!clientAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gradient-dark flex items-center justify-center">
+        <div className="text-center">
+          <div className="h-12 w-12 rounded-lg bg-gradient-gold animate-pulse mx-auto mb-4" />
+          <p className="text-muted-foreground">Verificando autenticação...</p>
+        </div>
+      </div>
+    );
+  }
+
   const showBarberSelector = barbers.length > 1;
 
   return (
@@ -733,8 +732,8 @@ const BookAppointment = () => {
           <h1 className="text-3xl font-bold">
             {barbershopInfo.name}
           </h1>
-          <p className="text-muted-foreground mb-4">
-            Escolha seus serviços e horário
+          <p className="text-muted-foreground mb-2">
+            Bem-vindo, {clientName}!
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
             <Button 
@@ -754,6 +753,14 @@ const BookAppointment = () => {
                 Falar no WhatsApp
               </Button>
             )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleLogout}
+            >
+              <LogOut className="h-4 w-4 mr-2" />
+              Sair
+            </Button>
           </div>
         </div>
       </header>
@@ -1042,47 +1049,11 @@ const BookAppointment = () => {
                 </div>
               )}
 
-              <div>
-                <Label htmlFor="name">Nome e Sobrenome *</Label>
-                <Input
-                  id="name"
-                  value={clientName}
-                  onChange={(e) => setClientName(e.target.value)}
-                  placeholder="Digite seu nome completo"
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="whatsapp">WhatsApp *</Label>
-                <Input
-                  id="whatsapp"
-                  value={clientWhatsapp}
-                  onChange={(e) => setClientWhatsapp(e.target.value)}
-                  onBlur={(e) => checkReturningClient(e.target.value)}
-                  placeholder="(00) 00000-0000"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="birthday" className="flex items-center gap-2">
-                  Data de Nascimento
-                </Label>
-                <Input
-                  id="birthday"
-                  type="date"
-                  value={clientBirthday}
-                  onChange={(e) => setClientBirthday(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  💡 Informe para ganhar descontos especiais!
-                </p>
-              </div>
-
               <Button
                 className="w-full"
                 size="lg"
                 onClick={handleBooking}
-                disabled={!selectedBarber || cart.length === 0 || !selectedDate || !selectedTime || !clientName || !clientWhatsapp}
+                disabled={!selectedBarber || cart.length === 0 || !selectedDate || !selectedTime}
               >
                 <Check className="h-5 w-5 mr-2" />
                 Confirmar {cart.length} Serviço(s) - R$ {getTotalPrice().toFixed(2)}
