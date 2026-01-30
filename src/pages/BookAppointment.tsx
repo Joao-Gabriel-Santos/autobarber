@@ -716,7 +716,7 @@ const BookAppointment = () => {
             />
           </div>
         )}
-        <div className="container mx-auto px-4 py-6 text-center">
+        <div className="container mx-auto px-4 py-12 text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
             {barbershopInfo.avatar_url ? (
               <img 
