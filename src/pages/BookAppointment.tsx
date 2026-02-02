@@ -557,100 +557,102 @@ const BookAppointment = () => {
   };
 
   const handleBooking = async () => {
-    if (!clientAuthenticated) {
-      toast({
-        title: "Faça login primeiro",
-        variant: "destructive",
-      });
-      navigate(`/client-auth/${barberSlug}`);
-      return;
-    }
+  if (!clientAuthenticated) {
+    toast({
+      title: "Faça login primeiro",
+      variant: "destructive",
+    });
+    navigate(`/client-auth/${barberSlug}`);
+    return;
+  }
 
-    if (cart.length === 0 || !selectedDate || !selectedTime || !selectedBarber) {
-      toast({
-        title: "Preencha todos os campos",
-        variant: "destructive",
-      });
-      return;
-    }
+  if (cart.length === 0 || !selectedDate || !selectedTime || !selectedBarber) {
+    toast({
+      title: "Preencha todos os campos",
+      variant: "destructive",
+    });
+    return;
+  }
 
-    try {
-      let currentTime = selectedTime;
-      const appointmentIds: string[] = [];
+  try {
+    // Preparar dados dos serviços
+    const servicesData = cart.map(item => ({
+      service_id: item.id,
+      service_name: item.name,
+      price: item.price,
+      duration: item.duration,
+      quantity: item.quantity
+    }));
 
-      for (const item of cart) {
-        for (let i = 0; i < item.quantity; i++) {
-          const { data: appointment, error } = await supabase
-            .from("appointments")
-            .insert({
-              barber_id: selectedBarber.id,
-              service_id: item.id,
-              appointment_date: format(selectedDate, "yyyy-MM-dd"),
-              appointment_time: currentTime,
-              client_name: clientName,
-              client_whatsapp: clientWhatsapp,
-              price: item.price,
-              status: "confirmed",
-              client_id: clientId,
-            })
-            .select()
-            .single();
+    // Calcular totais
+    const totalPrice = getTotalPrice();
+    const totalDuration = getTotalDuration();
 
-          if (error) throw error;
-          
-          appointmentIds.push(appointment.id);
+    // Criar nome resumido dos serviços para exibição
+    const servicesNames = cart.map(item => 
+      item.quantity > 1 ? `${item.quantity}x ${item.name}` : item.name
+    ).join(', ');
 
-          const [hour, minute] = currentTime.split(':').map(Number);
-          const totalMinutes = hour * 60 + minute + item.duration;
-          const nextHour = Math.floor(totalMinutes / 60);
-          const nextMinute = totalMinutes % 60;
-          currentTime = `${nextHour.toString().padStart(2, '0')}:${nextMinute.toString().padStart(2, '0')}`;
+    // Criar UM ÚNICO agendamento com todos os serviços
+    const { data: appointment, error } = await supabase
+      .from("appointments")
+      .insert({
+        barber_id: selectedBarber.id,
+        service_id: cart[0].id, // Manter por compatibilidade (primeiro serviço)
+        services_data: servicesData, // NOVO: Array com todos os serviços
+        appointment_date: format(selectedDate, "yyyy-MM-dd"),
+        appointment_time: selectedTime,
+        client_name: clientName,
+        client_whatsapp: clientWhatsapp,
+        price: totalPrice,
+        status: "confirmed",
+        client_id: clientId,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Enviar confirmação por WhatsApp
+    const phoneCheck = validateAndNormalize(clientWhatsapp);
+    if (phoneCheck.valid) {
+      await WhatsAppService.sendAppointmentConfirmation(
+        phoneCheck.e164,
+        {
+          service: servicesNames,
+          date: format(selectedDate, "dd/MM/yyyy", { locale: ptBR }),
+          time: selectedTime,
+          barber: selectedBarber.full_name,
         }
-      }
-
-      const servicesNames = cart.map(item => 
-        item.quantity > 1 ? `${item.quantity}x ${item.name}` : item.name
-      ).join(', ');
-
-      const phoneCheck = validateAndNormalize(clientWhatsapp);
-      if (phoneCheck.valid) {
-        await WhatsAppService.sendAppointmentConfirmation(
-          phoneCheck.e164,
-          {
-            service: servicesNames,
-            date: format(selectedDate, "dd/MM/yyyy", { locale: ptBR }),
-            time: selectedTime,
-            barber: selectedBarber.full_name,
-          }
-        );
-      }
-
-      toast({
-        title: "✅ Agendamento confirmado!",
-        description: `${clientName}, seus ${cart.length} serviço(s) foram confirmados!`,
-      });
-
-      clearCart();
-      setSelectedBarber(null);
-      setSelectedDate(availableDates[0]);
-      setSelectedTime("");
-
-      const cleanWhatsapp = clientWhatsapp.replace(/\D/g, '');
-      const fullWhatsapp = `+55${cleanWhatsapp}`;
-      const dashboardUrl = `/client-dashboard?whatsapp=${encodeURIComponent(fullWhatsapp)}&barbershop_id=${ownerId}&barbershop_slug=${barberSlug}`;
-
-      setTimeout(() => {
-        window.location.assign(dashboardUrl);
-      }, 1500);
-
-    } catch (error: any) {
-      toast({
-        title: "Erro ao agendar",
-        description: error.message,
-        variant: "destructive",
-      });
+      );
     }
-  };
+
+    toast({
+      title: "✅ Agendamento confirmado!",
+      description: `${clientName}, seu agendamento foi confirmado com ${cart.length} serviço(s)!`,
+    });
+
+    clearCart();
+    setSelectedBarber(null);
+    setSelectedDate(availableDates[0]);
+    setSelectedTime("");
+
+    // Não adicionar +55 se já estiver no formato correto
+    const finalWhatsapp = phoneCheck.valid ? phoneCheck.e164 : clientWhatsapp;
+    const dashboardUrl = `/client-dashboard?whatsapp=${encodeURIComponent(finalWhatsapp)}&barbershop_id=${ownerId}&barbershop_slug=${barberSlug}`;
+
+    setTimeout(() => {
+      window.location.assign(dashboardUrl);
+    }, 1500);
+
+  } catch (error: any) {
+    toast({
+      title: "Erro ao agendar",
+      description: error.message,
+      variant: "destructive",
+    });
+  }
+};
 
   const isDayDisabled = (date: Date) => {
     if (!selectedBarber) return true;
@@ -737,12 +739,16 @@ const BookAppointment = () => {
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
             <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => window.location.href = (`/meus-agendamentos?barbershop_slug=${barberSlug}`)}
-            >
-              Ver Meus Agendamentos
-            </Button>
+  variant="outline" 
+  size="sm"
+  onClick={() => {
+    // Certifique-se de que 'clientWhatsapp' e 'barberSlug' estão definidos no seu componente
+    const url = `/meus-agendamentos?whatsapp=${encodeURIComponent(clientWhatsapp)}&barbershop_slug=${barberSlug}`;
+    navigate(url);
+  }}
+>
+  Ver Meus Agendamentos
+</Button>
             {barbershopInfo.whatsapp_number && (
               <Button 
                 size="sm"

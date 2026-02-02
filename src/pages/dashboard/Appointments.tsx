@@ -22,6 +22,13 @@ interface Appointment {
   services: {
     name: string;
   };
+  services_data?: Array<{
+    service_id: string;
+    service_name: string;
+    price: number;
+    duration: number;
+    quantity: number;
+  }>;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -104,33 +111,26 @@ const Appointments = () => {
   }
 
   const handleWhatsAppClick = (whatsappNumber: string, clientName: string, appointment_date: string, appointment_time: string) => {
-    // Remove caracteres não numéricos do número
     const cleanNumber = whatsappNumber.replace(/\D/g, '');
-
-     const barbershopName = barbershop?.barbershop_name || 'nossa barbearia';
+    const barbershopName = barbershop?.barbershop_name || 'nossa barbearia';
     
-    // 2. Formata a data: de "2026-01-25" para "25/01 e Horario"
     const [year, month, day] = appointment_date.split('-');
     const dateFormatted = `${day}/${month}`;
     const timeFormatted = appointment_time.slice(0, 5);
 
-    // Cria a mensagem padrão personalizada
     const message = encodeURIComponent(`Olá, *${clientName}* tudo bem?
 Aqui é da barbearia ${barbershopName}.
 Passando só para confirmar seu agendamento para o dia ${dateFormatted} às ${timeFormatted}.
 Qualquer imprevisto é só avisar. Obrigado!`);
     
-    // Cria o link do WhatsApp
     const whatsappUrl = `https://wa.me/${cleanNumber}?text=${message}`;
-    
-    // Abre em nova aba
     window.open(whatsappUrl, '_blank');
   };
 
   const [isUpdating, setIsUpdating] = useState(false);
 
   const updateStatus = async (id: string, status: string) => {
-    if (isUpdating) return; // Trava para evitar cliques duplos
+    if (isUpdating) return;
     setIsUpdating(true);
 
     try {
@@ -161,73 +161,98 @@ Qualquer imprevisto é só avisar. Obrigado!`);
     return appointments.filter(apt => apt.status === status);
   };
 
-  const renderAppointmentCard = (appointment: Appointment) => (
-    <Card key={appointment.id} className="p-6 border-border bg-card">
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <h3 className="font-bold text-lg mb-1">
-            {appointment.services.name}
-          </h3>
-          <Badge className={STATUS_COLORS[appointment.status]}>
-            {STATUS_LABELS[appointment.status]}
-          </Badge>
+  const renderAppointmentCard = (appointment: Appointment) => {
+    const hasMultipleServices = appointment.services_data && Array.isArray(appointment.services_data) && appointment.services_data.length > 0;
+    
+    return (
+      <Card key={appointment.id} className="p-6 border-border bg-card">
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            {hasMultipleServices ? (
+              <>
+                <h3 className="font-bold text-lg mb-2">
+                  Múltiplos Serviços ({appointment.services_data.length})
+                </h3>
+                <div className="space-y-1">
+                  {appointment.services_data.map((svc: any, idx: number) => (
+                    <p key={idx} className="text-sm text-muted-foreground">
+                      {svc.quantity > 1 ? `${svc.quantity}x ` : ''}
+                      {svc.service_name} - R$ {(svc.price * svc.quantity).toFixed(2)}
+                    </p>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <h3 className="font-bold text-lg mb-1">
+                {appointment.services?.name || "Serviço"}
+              </h3>
+            )}
+            <Badge className={STATUS_COLORS[appointment.status]}>
+              {STATUS_LABELS[appointment.status]}
+            </Badge>
+          </div>
+          <div className="text-right">
+            <p className="text-2xl font-bold text-primary">
+              R$ {appointment.price.toFixed(2)}
+            </p>
+          </div>
         </div>
-        <div className="text-right">
-          <p className="text-2xl font-bold text-primary">
-            R$ {appointment.price.toFixed(2)}
-          </p>
-        </div>
-      </div>
 
-      <div className="grid md:grid-cols-2 gap-4 mb-4">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <User className="h-4 w-4" />
-          <span>{appointment.client_name}</span>
+        <div className="grid md:grid-cols-2 gap-4 mb-4">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <User className="h-4 w-4" />
+            <span>{appointment.client_name}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Phone className="h-4 w-4 text-muted-foreground" />
+            <button
+              onClick={() => handleWhatsAppClick(
+                appointment.client_whatsapp, 
+                appointment.client_name, 
+                appointment.appointment_date, 
+                appointment.appointment_time
+              )}
+              className="text-[#25D366] hover:text-[#20BA5A] hover:underline font-medium transition-colors flex items-center gap-1 group"
+            >
+              <span>{appointment.client_whatsapp}</span>
+              <MessageCircle className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </button>
+          </div>
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Calendar className="h-4 w-4" />
+            <span>
+              {format(parseDateAsLocal(appointment.appointment_date), "dd 'de' MMMM 'de' yyyy", {
+                locale: ptBR,
+              })}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Clock className="h-4 w-4" />
+            <span>{appointment.appointment_time}</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Phone className="h-4 w-4 text-muted-foreground" />
-          <button
-            onClick={() => handleWhatsAppClick(appointment.client_whatsapp, appointment.client_name, appointment.appointment_date, appointment.appointment_time)}
-            className="text-[#25D366] hover:text-[#20BA5A] hover:underline font-medium transition-colors flex items-center gap-1 group"
-          >
-            <span>{appointment.client_whatsapp}</span>
-            <MessageCircle className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-          </button>
-        </div>
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Calendar className="h-4 w-4" />
-          <span>
-            {format(parseDateAsLocal(appointment.appointment_date), "dd 'de' MMMM 'de' yyyy", {
-              locale: ptBR,
-            })}
-          </span>
-        </div>
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Clock className="h-4 w-4" />
-          <span>{appointment.appointment_time}</span>
-        </div>
-      </div>
 
-      {appointment.status === "confirmed" && (
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            onClick={() => updateStatus(appointment.id, "completed")}
-            className="flex-1"
-          >
-            Marcar como Concluído
-          </Button>
-          <Button
-            size="sm"
-            variant="destructive"
-            onClick={() => updateStatus(appointment.id, "cancelled")}
-          >
-            Cancelar
-          </Button>
-        </div>
-      )}
-    </Card>
-  );
+        {appointment.status === "confirmed" && (
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={() => updateStatus(appointment.id, "completed")}
+              className="flex-1"
+            >
+              Marcar como Concluído
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => updateStatus(appointment.id, "cancelled")}
+            >
+              Cancelar
+            </Button>
+          </div>
+        )}
+      </Card>
+    );
+  };
 
   if (loading) {
     return (
