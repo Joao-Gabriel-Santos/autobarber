@@ -32,89 +32,65 @@ const Dashboard = () => {
   const loadDashboardStats = async (userId: string) => {
     const today = new Date().toISOString().split("T")[0];
 
-    console.log("=== DASHBOARD DEBUG ===");
-    console.log("User ID:", userId);
-    console.log("Date:", today);
-    console.log("isOwner:", isOwner);
-    console.log("isBarber:", isBarber);
+  console.log("=== DASHBOARD DEBUG ===");
+  console.log("User ID:", userId);
+  console.log("Date:", today);
+  console.log("isOwner:", isOwner);
+  console.log("isBarber:", isBarber);
 
-    // Primeiro, descobrir qual é a barbearia do usuário
-    const { data: userProfile } = await supabase
+  let query = supabase
+    .from("appointments")
+    .select("status, appointment_date, price, barber_id")
+    .eq("appointment_date", today);
+
+  if (isBarber) {
+    query = query.eq("barber_id", userId);
+    console.log("🔍 Barbeiro: Buscando apenas agendamentos de", userId);
+  } else if (isOwner && permissions?.ownerId) {
+    const { data: teamMembers } = await supabase
       .from("profiles")
-      .select("id, role, barbershop_id")
-      .eq("id", userId)
-      .single();
+      .select("id")
+      .or(`id.eq.${userId},barbershop_id.eq.${userId}`);
+    
+    const barberIds = teamMembers?.map(m => m.id) || [userId];
+    
+    // 🔍 DEBUG: Log dos IDs buscados
+    console.log("🔍 Owner: Team Members encontrados:", teamMembers);
+    console.log("🔍 Owner: Barber IDs buscando:", barberIds);
+    
+    query = query.in("barber_id", barberIds);
+  }
 
-    if (!userProfile) {
-      console.error("Perfil do usuário não encontrado");
-      return null;
-    }
+  const { data, error } = await query;
 
-    // Determinar o ID da barbearia (owner ou barbershop_id do barbeiro)
-    const barbershopOwnerId = userProfile.role === 'owner' 
-      ? userId 
-      : userProfile.barbershop_id;
+  // 🔍 DEBUG: Log dos resultados
+  console.log("🔍 Resultado da query:");
+  console.log("  - Total de agendamentos encontrados:", data?.length || 0);
+  console.log("  - Dados:", data);
+  console.log("  - Erro:", error);
+  console.log("======================");
 
-    if (!barbershopOwnerId) {
-      console.error("Barbearia não identificada");
-      return null;
-    }
+  if (error) {
+    console.error(error);
+    return null;
+  }
 
-    console.log("🔍 Barbershop Owner ID:", barbershopOwnerId);
+  const totalHoje = data.length;
 
-    let query = supabase
-      .from("appointments")
-      .select("status, appointment_date, price, barber_id")
-      .eq("appointment_date", today);
+  const receitaHoje = data
+    .filter(a => a.status === "completed")
+    .reduce((sum, a) => sum + (a.price || 0), 0);
 
-    if (isBarber) {
-      // Barbeiro vê APENAS seus próprios agendamentos
-      query = query.eq("barber_id", userId);
-      console.log("🔍 Barbeiro: Buscando apenas agendamentos de", userId);
-    } else if (isOwner) {
-      // Owner vê todos os agendamentos da SUA equipe
-      const { data: teamMembers } = await supabase
-        .from("profiles")
-        .select("id")
-        .or(`id.eq.${barbershopOwnerId},barbershop_id.eq.${barbershopOwnerId}`);
-      
-      const barberIds = teamMembers?.map(m => m.id) || [barbershopOwnerId];
-      
-      console.log("🔍 Owner: Team Members encontrados:", teamMembers);
-      console.log("🔍 Owner: Barber IDs buscando:", barberIds);
-      
-      query = query.in("barber_id", barberIds);
-    }
+  const taxaConfirmacao =
+    totalHoje === 0
+      ? 0
+      : Math.round(
+        (data.filter(a => a.status === "confirmed" || a.status === "completed").length /
+          totalHoje) *
+        100
+      );
 
-    const { data, error } = await query;
-
-    console.log("🔍 Resultado da query:");
-    console.log("  - Total de agendamentos encontrados:", data?.length || 0);
-    console.log("  - Dados:", data);
-    console.log("  - Erro:", error);
-    console.log("======================");
-
-    if (error) {
-      console.error(error);
-      return null;
-    }
-
-    const totalHoje = data?.length || 0;
-
-    const receitaHoje = (data || [])
-      .filter(a => a.status === "completed")
-      .reduce((sum, a) => sum + (a.price || 0), 0);
-
-    const taxaConfirmacao =
-      totalHoje === 0
-        ? 0
-        : Math.round(
-          ((data || []).filter(a => a.status === "confirmed" || a.status === "completed").length /
-            totalHoje) *
-          100
-        );
-
-    return { totalHoje, receitaHoje, taxaConfirmacao };
+  return { totalHoje, receitaHoje, taxaConfirmacao };
   };
 
   const checkUser = async () => {
