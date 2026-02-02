@@ -74,25 +74,14 @@ const Appointments = () => {
   };
 
   const loadAppointments = async (userId: string) => {
-    const { data: barbershopData } = await supabase
-      .from("barbershops")
-      .select("barbershop_name")
-      .eq("barber_id", userId)
-      .single();
-    
-    if (barbershopData) {
-      setBarbershop(barbershopData);
-    }
-
+    setLoading(true);
     const { data, error } = await supabase
       .from("appointments")
       .select(`
         *,
         services(name)
       `)
-      .eq("barber_id", userId)
-      .order("appointment_date", { ascending: true })
-      .order("appointment_time", { ascending: true });
+      .eq("barber_id", userId);
 
     if (error) {
       toast({
@@ -103,7 +92,10 @@ const Appointments = () => {
       return;
     }
 
-    setAppointments(data || []);
+    const uniqueData = Array.from(new Map(data.map(item => [item.id, item])).values());
+  
+  setAppointments(uniqueData);
+  setLoading(false);
   };
 
   function parseDateAsLocal(dateString: string) {
