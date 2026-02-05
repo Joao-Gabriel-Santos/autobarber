@@ -1,18 +1,18 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Calendar, Settings, TrendingUp, LogOut, Copy, ExternalLink, DollarSign, Users, Lock, Clock } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import WalkInAppointment from "@/components/WalkInAppointment";
-import { usePermissions } from "@/hooks/usePermissions";
-import { useSubscription } from "@/hooks/useSubscription";
-import { SubscriptionGate } from "@/components/SubscriptionGate";
-import {Users as UsersIcon } from "lucide-react";
+  import { useEffect, useState } from "react";
+  import { useNavigate } from "react-router-dom";
+  import { supabase } from "@/integrations/supabase/client";
+  import { Button } from "@/components/ui/button";
+  import { Card } from "@/components/ui/card";
+  import { Input } from "@/components/ui/input";
+  import { Calendar, Settings, TrendingUp, LogOut, Copy, ExternalLink, DollarSign, Users, Lock, Clock } from "lucide-react";
+  import { useToast } from "@/hooks/use-toast";
+  import WalkInAppointment from "@/components/WalkInAppointment";
+  import { usePermissions } from "@/hooks/usePermissions";
+  import { useSubscription } from "@/hooks/useSubscription";
+  import { SubscriptionGate } from "@/components/SubscriptionGate";
+  import {Users as UsersIcon } from "lucide-react";
 
-const Dashboard = () => {
+  const Dashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { permissions, loading: permissionsLoading } = usePermissions();
@@ -589,6 +589,6 @@ const Dashboard = () => {
     </div>
     </SubscriptionGate>
   );
-};
+  };
 
-export default Dashboard;
+  export default Dashboard;
