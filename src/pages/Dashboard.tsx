@@ -1,4 +1,4 @@
-  import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
   import { useNavigate } from "react-router-dom";
   import { supabase } from "@/integrations/supabase/client";
   import { Button } from "@/components/ui/button";
@@ -26,8 +26,9 @@
   const [receitaHoje, setReceitaHoje] = useState(0);
   const [taxaConfirmacao, setTaxaConfirmacao] = useState(0);
 
-  const isOwner = permissions?.role === 'owner';
-  const isBarber = permissions?.role === 'barber';
+  // 🔧 CORREÇÃO PRINCIPAL: Esperar permissions carregar antes de definir
+  const isOwner = !permissionsLoading && permissions?.role === 'owner';
+  const isBarber = !permissionsLoading && permissions?.role === 'barber';
 
   const loadDashboardStats = async (userId: string) => {
     const today = new Date().toISOString().split("T")[0];
@@ -35,6 +36,8 @@
   console.log("=== DASHBOARD DEBUG ===");
   console.log("User ID:", userId);
   console.log("Date:", today);
+  console.log("Permissions:", permissions);
+  console.log("Permissions Loading:", permissionsLoading);
   console.log("isOwner:", isOwner);
   console.log("isBarber:", isBarber);
 
@@ -54,7 +57,6 @@
     
     const barberIds = teamMembers?.map(m => m.id) || [userId];
     
-    // 🔍 DEBUG: Log dos IDs buscados
     console.log("🔍 Owner: Team Members encontrados:", teamMembers);
     console.log("🔍 Owner: Barber IDs buscando:", barberIds);
     
@@ -63,7 +65,6 @@
 
   const { data, error } = await query;
 
-  // 🔍 DEBUG: Log dos resultados
   console.log("🔍 Resultado da query:");
   console.log("  - Total de agendamentos encontrados:", data?.length || 0);
   console.log("  - Dados:", data);
@@ -102,13 +103,6 @@
         return;
       }
 
-      const stats = await loadDashboardStats(user.id);
-      if (stats) {
-        setTotalHoje(stats.totalHoje);
-        setReceitaHoje(stats.receitaHoje);
-        setTaxaConfirmacao(stats.taxaConfirmacao);
-      }
-
       setUser(user);
 
       const { data: profile, error: profileError } = await supabase
@@ -121,7 +115,9 @@
         console.error("Error loading profile:", profileError);
       }
 
-      // Se for barbeiro, buscar dados do owner
+      // 🔧 IMPORTANTE: Aguardar permissions carregar ANTES de buscar stats
+      // Não carregar stats aqui, deixar o useEffect fazer isso
+
       const targetId = profile?.role === 'barber' && profile.barbershop_id 
         ? profile.barbershop_id 
         : user.id;
@@ -166,6 +162,20 @@
   useEffect(() => {
     checkUser();
   }, []);
+
+  // 🔧 NOVO: UseEffect separado para carregar stats SOMENTE quando permissions estiver pronto
+  useEffect(() => {
+    if (user && !permissionsLoading && permissions) {
+      console.log("✅ Permissions carregado, buscando stats...");
+      loadDashboardStats(user.id).then(stats => {
+        if (stats) {
+          setTotalHoje(stats.totalHoje);
+          setReceitaHoje(stats.receitaHoje);
+          setTaxaConfirmacao(stats.taxaConfirmacao);
+        }
+      });
+    }
+  }, [user, permissionsLoading, permissions]);
 
   const handleLogout = async () => {
     try {
