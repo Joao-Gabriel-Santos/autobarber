@@ -11,7 +11,7 @@ const PLAN_FEATURES = {
     online_booking: false,
     schedule: false,
     reminders: false,
-    team_management: false,
+    team_management: true,
     custom_link: false,
   },
   
