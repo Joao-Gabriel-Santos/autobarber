@@ -35,6 +35,14 @@ const ClientAuth = () => {
     loadBarbershopData();
   }, [barberSlug]);
 
+  const maskDate = (value) => {
+  return value
+    .replace(/\D/g, "") // Remove tudo que não é número
+    .replace(/(\d{2})(\d)/, "$1/$2") // Coloca a barra após os 2 primeiros números
+    .replace(/(\d{2})(\d)/, "$1/$2") // Coloca a segunda barra após os próximos 2 números
+    .replace(/(\d{4})(\d+?)$/, "$1"); // Limita o ano a 4 dígitos
+  };
+
   const validateAndNormalize = (phone: string) => {
     const defaultCountry = 'BR' as CountryCode;
     const phoneNumber = parsePhoneNumberFromString(phone, defaultCountry);
@@ -371,15 +379,21 @@ const ClientAuth = () => {
 
               <div>
                 <Label htmlFor="birthday" className="flex items-center gap-2">
-                  Data de Nascimento
-                </Label>
-                <Input
-                  id="birthday"
-                  type="date"
-                  value={registerData.birthday}
-                  onChange={(e) => setRegisterData({ ...registerData, birthday: e.target.value })}
-                  className="bg-background"
-                />
+                Data de Nascimento *
+              </Label>
+              <Input
+                id="birthday"
+                type="text"
+                inputMode="numeric"
+                value={registerData.birthday}
+                onChange={(e) => {
+                  const maskedValue = maskDate(e.target.value);
+                  setRegisterData({ ...registerData, birthday: maskedValue });
+                }}
+                maxLength={10}
+                placeholder="00/00/0000"
+                className="bg-background"
+              />
                 <p className="text-xs text-muted-foreground mt-1">
                   💡 Informe para ganhar descontos especiais!
                 </p>
