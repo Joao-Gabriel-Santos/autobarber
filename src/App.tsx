@@ -1,5 +1,3 @@
-// src/App.tsx - CORRIGIDO COM TODAS AS ROTAS
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -25,6 +23,8 @@ import Finance from "./pages/dashboard/Finance";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import TeamManagement from "./pages/dashboard/TeamManagement";
 import AcceptInvite from "./pages/dashboard/AcceptInvite";
+import Product from "./pages/dashboard/Product";
+import Stock from "./pages/dashboard/Stock";
 
 // Páginas de Clientes
 import ClientsManagement from "./pages/dashboard/Clients";
@@ -64,6 +64,8 @@ const App = () => (
           <Route path="/dashboard/finance" element={<Finance />} />
           <Route path="/dashboard/team" element={<TeamManagement />} />
           <Route path="/dashboard/clients" element={<ClientsManagement />} />
+          <Route path="/dashboard/product" element={<Product/>} />
+          <Route path="/dashboard/stock" element={<Stock/>} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/accept-invite/:token" element={<AcceptInvite />} />
           

@@ -287,8 +287,14 @@ const AcceptInvite = () => {
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 disabled={true}
-                className="bg-muted"
+                className="bg-muted mb-6"
               />
+              <Alert className="mb-6">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            Como barbeiro, você poderá gerenciar seus horários e visualizar seus agendamentos.
+          </AlertDescription>
+        </Alert>
             </div>
 
             <div>

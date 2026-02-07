@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
   import { Button } from "@/components/ui/button";
   import { Card } from "@/components/ui/card";
   import { Input } from "@/components/ui/input";
-  import { Calendar, Settings, TrendingUp, LogOut, Copy, ExternalLink, DollarSign, Users, Lock, Clock } from "lucide-react";
+  import { Calendar, Settings, TrendingUp, LogOut, Copy, ExternalLink, DollarSign, Users, Lock, Clock, ShoppingBasket, ShoppingCart } from "lucide-react";
   import { useToast } from "@/hooks/use-toast";
   import WalkInAppointment from "@/components/WalkInAppointment";
   import { usePermissions } from "@/hooks/usePermissions";
@@ -449,6 +449,24 @@ import { useEffect, useState } from "react";
             </div>
           )}
 
+
+          {/* Produtos - Apenas Owner */}
+          {isOwner && (
+            <div
+              className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
+              onClick={() => navigate("/dashboard/product")}
+            >
+              <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <ShoppingBasket className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="font-bold text-xl mb-2">Produtos</h3>
+              <p className="text-muted-foreground text-sm">
+                Gerencie produtos, estoque e fotos dos produtos
+              </p>
+            </div>
+          )}
+
+
           {/* FINANCEIRO - Apenas Owner */}
           {isOwner && hasFeature('finance') && (
             <div
@@ -480,6 +498,22 @@ import { useEffect, useState } from "react";
             </div>
           )}
 
+
+          {isOwner && (
+            <div
+              className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
+              onClick={() => navigate("/dashboard/stock")}
+            >
+              <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <ShoppingCart className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="font-bold text-xl mb-2">Estoque</h3>
+              <p className="text-muted-foreground text-sm">
+                Gerencie seu Estoque
+              </p>
+            </div>
+          )}
+        
 
           {/* EQUIPE - Apenas Owner Master */}
           {isOwner && hasFeature('team_management') ? (

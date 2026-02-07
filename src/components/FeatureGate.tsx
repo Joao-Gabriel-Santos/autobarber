@@ -1,5 +1,3 @@
-// src/components/FeatureGate.tsx
-
 import { ReactNode } from "react";
 import React from "react";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -71,6 +69,7 @@ export const FeatureGate = ({ feature, children, fallback }: FeatureGateProps) =
     walk_in: 'Entrada Direta',
     services: 'Gerenciar Serviços',
     finance: 'Painel Financeiro',
+    product: 'Gerenciar Produtos',
     online_booking: 'Agendamento Online',
     schedule: 'Configurar Horários',
     reminders: 'Lembretes Automáticos',
