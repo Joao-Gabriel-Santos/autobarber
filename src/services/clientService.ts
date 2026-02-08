@@ -148,7 +148,6 @@ export class ClientService {
         let dias_sem_corte: number | undefined;
         
         if (client.data_ultimo_corte) {
-          // ✅ CORREÇÃO: Usar startOfDay para ambas as datas para comparação justa
           const lastCutDate = startOfDay(parseISO(client.data_ultimo_corte));
           dias_sem_corte = differenceInDays(today, lastCutDate);
         }
@@ -174,10 +173,16 @@ export class ClientService {
       // Aplicar filtros adicionais
       let filtered = clientsWithMetrics;
 
+      // ✅ CORREÇÃO: Incluir clientes que nunca cortaram (data_ultimo_corte = null) OU que passaram 30+ dias
       if (filters.inativos) {
-        filtered = filtered.filter(
-          (c) => c.dias_sem_corte !== undefined && c.dias_sem_corte > 30
-        );
+        filtered = filtered.filter((c) => {
+          // Cliente nunca cortou (data_ultimo_corte é null)
+          if (c.data_ultimo_corte === null) {
+            return true;
+          }
+          // Cliente cortou há mais de 30 dias
+          return c.dias_sem_corte !== undefined && c.dias_sem_corte > 30;
+        });
       }
 
       if (filters.aniversariantes) {
@@ -206,6 +211,7 @@ export class ClientService {
 
       const today = startOfDay(new Date());
       const currentMonth = new Date().getMonth();
+      
       const clientes_ativos = clients.filter((c) => {
         if (!c.data_ultimo_corte) return false;
         const lastCutDate = startOfDay(parseISO(c.data_ultimo_corte));
@@ -213,8 +219,12 @@ export class ClientService {
         return daysSince <= 30;
       }).length;
 
+      // ✅ CORREÇÃO: Inativos = sem último corte OU 30+ dias
       const clientes_inativos = clients.filter((c) => {
+        // Nunca cortou
         if (!c.data_ultimo_corte) return true;
+        
+        // Cortou há mais de 30 dias
         const lastCutDate = startOfDay(parseISO(c.data_ultimo_corte));
         const daysSince = differenceInDays(today, lastCutDate);
         return daysSince > 30;

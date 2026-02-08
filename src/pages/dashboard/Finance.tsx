@@ -54,6 +54,7 @@ const Finance = () => {
   const [monthlyData, setMonthlyData] = useState<any[]>([]);
   const [lastMonthRevenue, setLastMonthRevenue] = useState(0);
 
+  // ✅ IMPORTANTE: Aguardar permissions antes de definir isOwner/isBarber
   const isOwner = !permissionsLoading && permissions?.role === 'owner';
   const isBarber = !permissionsLoading && permissions?.role === 'barber';
 
@@ -69,7 +70,6 @@ const Finance = () => {
         return;
       }
       setUser(user);
-      await loadFinancialData(user.id);
     } catch (error) {
       console.error("Error:", error);
       navigate("/login");
@@ -78,6 +78,14 @@ const Finance = () => {
     }
   };
 
+  // ✅ CORREÇÃO: Aguardar permissions antes de carregar dados
+  useEffect(() => {
+    if (user && !permissionsLoading && permissions) {
+      console.log("✅ Permissions carregadas, buscando dados financeiros...");
+      loadFinancialData(user.id);
+    }
+  }, [user, permissionsLoading, permissions]);
+
   const loadFinancialData = async (userId: string) => {
     try {
       console.log("=== FINANCE DEBUG ===");
@@ -85,6 +93,12 @@ const Finance = () => {
       console.log("Permissions:", permissions);
       console.log("isOwner:", isOwner);
       console.log("isBarber:", isBarber);
+
+      // ✅ VALIDAÇÃO: Garantir que permissions foi carregado
+      if (!permissions) {
+        console.log("⚠️ Permissions ainda não carregadas, aguardando...");
+        return;
+      }
 
       // Buscar agendamentos
       let query = supabase
@@ -103,28 +117,35 @@ const Finance = () => {
         `)
         .eq("status", "completed");
 
-      // Se for barbeiro, filtrar apenas seus agendamentos
-      if (isBarber) {
+      // ✅ CORREÇÃO: Aplicar filtro correto baseado no role
+      if (permissions.role === 'barber') {
+        // Barbeiro: Apenas seus próprios agendamentos
         query = query.eq("barber_id", userId);
-        console.log("🔍 Barbeiro: Buscando apenas agendamentos de", userId);
-      } else if (isOwner) {
-        // Owner vê toda a equipe
+        console.log("🔍 Barbeiro: Filtrando apenas agendamentos de", userId);
+      } else if (permissions.role === 'owner') {
+        // Owner: Todos os agendamentos da equipe
         const { data: teamMembers } = await supabase
           .from("profiles")
           .select("id")
           .or(`id.eq.${userId},barbershop_id.eq.${userId}`);
         
         const barberIds = teamMembers?.map(m => m.id) || [userId];
-        console.log("🔍 Owner: Barber IDs buscando:", barberIds);
         query = query.in("barber_id", barberIds);
+        console.log("🔍 Owner: Filtrando agendamentos de", barberIds.length, "barbeiros:", barberIds);
+      } else {
+        console.error("❌ Role desconhecido:", permissions.role);
+        return;
       }
 
       const { data: appointments, error } = await query;
 
-      console.log("🔍 Total de agendamentos encontrados:", appointments?.length || 0);
-      console.log("======================");
+      if (error) {
+        console.error("❌ Erro ao buscar agendamentos:", error);
+        throw error;
+      }
 
-      if (error) throw error;
+      console.log("✅ Total de agendamentos encontrados:", appointments?.length || 0);
+      console.log("======================");
 
       const now = new Date();
       const weekStart = startOfWeek(now, { locale: ptBR });

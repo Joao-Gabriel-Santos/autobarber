@@ -17,7 +17,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { permissions, loading: permissionsLoading } = usePermissions();
-  const { hasFeature, getPlanName } = useSubscription();
+  const { hasFeature, getPlanName, currentPlan } = useSubscription();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [barbershopSlug, setBarbershopSlug] = useState<string>("");
@@ -543,76 +543,84 @@ const Dashboard = () => {
               </div>
             )}
 
-            {/* PRODUTOS - Apenas Owner Master */}
-            {isOwner && hasFeature('team_management') ? (
-              <div
-                className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
-                onClick={() => navigate("/dashboard/product")}
-              >
-                <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <ShoppingBasket className="h-6 w-6 text-primary" />
-                </div>
-                <h3 className="font-bold text-xl mb-2">Produtos</h3>
-                <p className="text-muted-foreground text-sm">
-                  Gerencie produtos e estoque
-                </p>
-              </div>
-            ) : isOwner && (
-              <div className="bg-card border border-border rounded-xl p-6 opacity-50 relative">
-                <div className="absolute top-4 right-4">
-                  <Lock className="h-5 w-5 text-muted-foreground" />
-                </div>
-                <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center mb-4">
-                  <ShoppingBasket className="h-6 w-6 text-muted-foreground" />
-                </div>
-                <h3 className="font-bold text-xl mb-2">Produtos</h3>
-                <p className="text-muted-foreground text-sm mb-3">
-                  Gerencie produtos e estoque
-                </p>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => navigate("/signup")}
-                >
-                  Upgrade para Master
-                </Button>
-              </div>
+            {/* ✅ PRODUTOS - Apenas Owner Master */}
+            {isOwner && (
+              <>
+                {currentPlan === 'master' ? (
+                  <div
+                    className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
+                    onClick={() => navigate("/dashboard/product")}
+                  >
+                    <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                      <ShoppingBasket className="h-6 w-6 text-primary" />
+                    </div>
+                    <h3 className="font-bold text-xl mb-2">Produtos</h3>
+                    <p className="text-muted-foreground text-sm">
+                      Gerencie produtos e estoque
+                    </p>
+                  </div>
+                ) : (
+                  <div className="bg-card border border-border rounded-xl p-6 opacity-50 relative">
+                    <div className="absolute top-4 right-4">
+                      <Lock className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center mb-4">
+                      <ShoppingBasket className="h-6 w-6 text-muted-foreground" />
+                    </div>
+                    <h3 className="font-bold text-xl mb-2">Produtos</h3>
+                    <p className="text-muted-foreground text-sm mb-3">
+                      Gerencie produtos e estoque
+                    </p>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => navigate("/signup")}
+                    >
+                      Upgrade para Master
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
 
-            {/* ESTOQUE - Apenas Owner Master */}
-            {isOwner && hasFeature('team_management') ? (
-              <div
-                className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
-                onClick={() => navigate("/dashboard/stock")}
-              >
-                <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <ShoppingCart className="h-6 w-6 text-primary" />
-                </div>
-                <h3 className="font-bold text-xl mb-2">Estoque</h3>
-                <p className="text-muted-foreground text-sm">
-                  Gerencie seu estoque
-                </p>
-              </div>
-            ) : isOwner && (
-              <div className="bg-card border border-border rounded-xl p-6 opacity-50 relative">
-                <div className="absolute top-4 right-4">
-                  <Lock className="h-5 w-5 text-muted-foreground" />
-                </div>
-                <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center mb-4">
-                  <ShoppingCart className="h-6 w-6 text-muted-foreground" />
-                </div>
-                <h3 className="font-bold text-xl mb-2">Estoque</h3>
-                <p className="text-muted-foreground text-sm mb-3">
-                  Gerencie seu estoque
-                </p>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => navigate("/signup")}
-                >
-                  Upgrade para Master
-                </Button>
-              </div>
+            {/* ✅ ESTOQUE - Apenas Owner Master */}
+            {isOwner && (
+              <>
+                {currentPlan === 'master' ? (
+                  <div
+                    className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
+                    onClick={() => navigate("/dashboard/stock")}
+                  >
+                    <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                      <ShoppingCart className="h-6 w-6 text-primary" />
+                    </div>
+                    <h3 className="font-bold text-xl mb-2">Estoque</h3>
+                    <p className="text-muted-foreground text-sm">
+                      Gerencie seu estoque
+                    </p>
+                  </div>
+                ) : (
+                  <div className="bg-card border border-border rounded-xl p-6 opacity-50 relative">
+                    <div className="absolute top-4 right-4">
+                      <Lock className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center mb-4">
+                      <ShoppingCart className="h-6 w-6 text-muted-foreground" />
+                    </div>
+                    <h3 className="font-bold text-xl mb-2">Estoque</h3>
+                    <p className="text-muted-foreground text-sm mb-3">
+                      Gerencie seu estoque
+                    </p>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => navigate("/signup")}
+                    >
+                      Upgrade para Master
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
 
             {/* EQUIPE - Apenas Owner Master */}
