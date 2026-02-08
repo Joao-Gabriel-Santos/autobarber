@@ -165,10 +165,11 @@ const Index = () => {
         </div>
 
         <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-          {/* Plano Starter */}
+
+          {/* Plano Basic */}
           <div className="bg-card border border-border rounded-2xl p-8 hover:border-primary/50 transition-all">
             <div className="text-center mb-6">
-              <h3 className="text-2xl font-bold mb-2">Starter</h3>
+              <h3 className="text-2xl font-bold mb-2">Basic</h3>
               <p className="text-muted-foreground text-sm mb-4">
                 Para quem quer controle financeiro
               </p>
@@ -194,6 +195,51 @@ const Index = () => {
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
                 <span className="text-sm">1 barbeiro</span>
+              </li>
+              <li className="flex items-start gap-2 opacity-50">
+                <span className="h-5 w-5 flex-shrink-0 mt-0.5">❌</span>
+                <span className="text-sm line-through">Agendamento online</span>
+              </li>
+            </ul>
+
+            <Button 
+              className="w-full"
+              variant="outline"
+              onClick={() => navigate("/signup?plan=starter")}
+            >
+              Começar com Basic
+            </Button>
+          </div>
+
+          {/* Plano Starter */}
+          <div className="bg-card border border-border rounded-2xl p-8 hover:border-primary/50 transition-all">
+            <div className="text-center mb-6">
+              <h3 className="text-2xl font-bold mb-2">Starter</h3>
+              <p className="text-muted-foreground text-sm mb-4">
+                Para quem quer controle financeiro e gerenciar sua equipe
+              </p>
+              <div className="mb-6">
+                <span className="text-4xl font-bold text-primary">R$ 37</span>
+                <span className="text-muted-foreground">/mês</span>
+              </div>
+            </div>
+            
+            <ul className="space-y-3 mb-8">
+              <li className="flex items-start gap-2">
+                <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                <span className="text-sm">Entrada Direta (Walk-in)</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                <span className="text-sm">Controle financeiro completo</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                <span className="text-sm">Relatórios e métricas</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                <span className="text-sm">Até 5 barbeiro</span>
               </li>
               <li className="flex items-start gap-2 opacity-50">
                 <span className="h-5 w-5 flex-shrink-0 mt-0.5">❌</span>

@@ -5,12 +5,19 @@ import { Label } from "@/components/ui/label";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { features } from "process";
 
 const PLANS = {
+  basic: {
+    name: "Basic",
+    price: 27,
+    features: ["Entrada Direta", "Controle Financeiro", "1 Barbeiro"],
+    priceId: import.meta.env.VITE_STRIPE_PRICE_BASIC
+  },
   starter: { 
     name: "Starter", 
-    price: 27, 
-    features: ["Entrada Direta", "Controle Financeiro", "1 Barbeiro"],
+    price: 37, 
+    features: ["Entrada Direta", "Controle Financeiro", "Até 5 Barbeiro"],
     priceId: import.meta.env.VITE_STRIPE_PRICE_STARTER
   },
   pro: { 
@@ -152,7 +159,7 @@ const handleSignup = async (e: React.FormEvent) => {
           {/* Seletor de Plano */}
           <div className="mb-6">
             <Label className="mb-3 block">Escolha seu plano</Label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-4 gap-2">
               {(Object.keys(PLANS) as Array<keyof typeof PLANS>).map((plan) => (
                 <button
                   key={plan}
