@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface Appointment {
   id: string;
@@ -35,9 +36,10 @@ interface HourStats {
 
 const COLORS = ['#FFD700', '#FFA500', '#FF8C00', '#FF6B35', '#FF4500'];
 
-const Financie = () => {
+const Finance = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { permissions, loading: permissionsLoading } = usePermissions();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
@@ -51,6 +53,9 @@ const Financie = () => {
   const [weeklyData, setWeeklyData] = useState<any[]>([]);
   const [monthlyData, setMonthlyData] = useState<any[]>([]);
   const [lastMonthRevenue, setLastMonthRevenue] = useState(0);
+
+  const isOwner = !permissionsLoading && permissions?.role === 'owner';
+  const isBarber = !permissionsLoading && permissions?.role === 'barber';
 
   useEffect(() => {
     checkUser();
@@ -75,8 +80,14 @@ const Financie = () => {
 
   const loadFinancialData = async (userId: string) => {
     try {
-      // Buscar todos os agendamentos concluídos
-      const { data: appointments, error } = await supabase
+      console.log("=== FINANCE DEBUG ===");
+      console.log("User ID:", userId);
+      console.log("Permissions:", permissions);
+      console.log("isOwner:", isOwner);
+      console.log("isBarber:", isBarber);
+
+      // Buscar agendamentos
+      let query = supabase
         .from("appointments")
         .select(`
           id,
@@ -84,13 +95,34 @@ const Financie = () => {
           appointment_time,
           price,
           status,
+          barber_id,
           services (
             id,
             name
           )
         `)
-        .eq("barber_id", userId)
         .eq("status", "completed");
+
+      // Se for barbeiro, filtrar apenas seus agendamentos
+      if (isBarber) {
+        query = query.eq("barber_id", userId);
+        console.log("🔍 Barbeiro: Buscando apenas agendamentos de", userId);
+      } else if (isOwner) {
+        // Owner vê toda a equipe
+        const { data: teamMembers } = await supabase
+          .from("profiles")
+          .select("id")
+          .or(`id.eq.${userId},barbershop_id.eq.${userId}`);
+        
+        const barberIds = teamMembers?.map(m => m.id) || [userId];
+        console.log("🔍 Owner: Barber IDs buscando:", barberIds);
+        query = query.in("barber_id", barberIds);
+      }
+
+      const { data: appointments, error } = await query;
+
+      console.log("🔍 Total de agendamentos encontrados:", appointments?.length || 0);
+      console.log("======================");
 
       if (error) throw error;
 
@@ -126,6 +158,7 @@ const Financie = () => {
       setLastMonthRevenue(lastMonthRev);
       setTotalAppointments(appointments?.length || 0);
 
+      // Estatísticas de serviços
       const serviceMap = new Map<string, ServiceStats>();
       appointments?.forEach(apt => {
         const serviceName = apt.services?.name || "Sem nome";
@@ -150,6 +183,7 @@ const Financie = () => {
         .slice(0, 5);
       setTopServices(topSvcs);
 
+      // Horários de pico
       const hourMap = new Map<string, number>();
       appointments?.forEach(apt => {
         const hour = apt.appointment_time.split(':')[0] + ':00';
@@ -162,6 +196,7 @@ const Financie = () => {
         .slice(0, 10);
       setPeakHours(peakHrs);
 
+      // Dados semanais
       const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
       const weekChart = weekDays.map(day => {
         const dayStr = format(day, 'yyyy-MM-dd');
@@ -175,6 +210,7 @@ const Financie = () => {
       });
       setWeeklyData(weekChart);
 
+      // Dados mensais
       const monthsData = [];
       for (let i = 2; i >= 0; i--) {
         const monthDate = subMonths(now, i);
@@ -205,7 +241,7 @@ const Financie = () => {
     }
   };
 
-  if (loading) {
+  if (loading || permissionsLoading) {
     return (
       <div className="min-h-screen bg-gradient-dark flex items-center justify-center">
         <div className="text-center">
@@ -229,9 +265,14 @@ const Financie = () => {
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div>
-              <h1 className="text-2xl font-bold">Painel Financeiro</h1>
+              <h1 className="text-2xl font-bold">
+                {isBarber ? "Meu Painel Financeiro" : "Painel Financeiro"}
+              </h1>
               <p className="text-sm text-muted-foreground">
-                Análise completa do desempenho da barbearia
+                {isBarber 
+                  ? "Análise dos seus ganhos e desempenho"
+                  : "Análise completa do desempenho da barbearia"
+                }
               </p>
             </div>
           </div>
@@ -243,7 +284,9 @@ const Financie = () => {
         <div className="grid md:grid-cols-4 gap-6 mb-8">
           <Card className="p-6 border-border bg-card hover:border-primary/50 transition-all">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-muted-foreground">Receita Semanal</span>
+              <span className="text-sm text-muted-foreground">
+                {isBarber ? "Minha Receita Semanal" : "Receita Semanal"}
+              </span>
               <Calendar className="h-4 w-4 text-primary" />
             </div>
             <p className="text-3xl font-bold text-primary">
@@ -256,7 +299,9 @@ const Financie = () => {
 
           <Card className="p-6 border-border bg-card hover:border-primary/50 transition-all">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-muted-foreground">Receita Mensal</span>
+              <span className="text-sm text-muted-foreground">
+                {isBarber ? "Minha Receita Mensal" : "Receita Mensal"}
+              </span>
               <DollarSign className="h-4 w-4 text-primary" />
             </div>
             <p className="text-3xl font-bold text-primary">
@@ -269,7 +314,9 @@ const Financie = () => {
 
           <Card className="p-6 border-border bg-card hover:border-primary/50 transition-all">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-muted-foreground">Total Atendimentos</span>
+              <span className="text-sm text-muted-foreground">
+                {isBarber ? "Meus Atendimentos" : "Total Atendimentos"}
+              </span>
               <TrendingUp className="h-4 w-4 text-primary" />
             </div>
             <p className="text-3xl font-bold">{totalAppointments}</p>
@@ -419,4 +466,4 @@ const Financie = () => {
   );
 };
 
-export default Financie;
+export default Finance;
