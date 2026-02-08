@@ -17,6 +17,7 @@ const ClientAppointments = () => {
     if (whatsapp && barbershopSlug) {
       loadClientDashboard();
     } else {
+      console.error("Missing parameters:", { whatsapp, barbershopSlug });
       toast({
         title: "Link inválido",
         description: "Parâmetros necessários não foram fornecidos",
@@ -45,7 +46,15 @@ const ClientAppointments = () => {
   };
 
   const loadClientDashboard = async () => {
-    if (!whatsapp) return;
+    if (!whatsapp || !barbershopSlug) {
+      toast({
+        title: "Link inválido",
+        description: "Parâmetros necessários não foram fornecidos",
+        variant: "destructive",
+      });
+      navigate("/");
+      return;
+    }
 
     setLoading(true);
     try {
@@ -62,15 +71,18 @@ const ClientAppointments = () => {
 
       const normalizedWhatsapp = phoneCheck.e164;
 
-      const { data: client, error: clientError } = await supabase
+      // Buscar todos os clientes com este WhatsApp
+      const { data: clients, error: clientError } = await supabase
         .from("clients")
         .select("barbershop_id, nome")
-        .eq("whatsapp", normalizedWhatsapp)
-        .maybeSingle();
+        .eq("whatsapp", normalizedWhatsapp);
 
-      if (clientError) throw clientError;
+      if (clientError) {
+        console.error("Client error:", clientError);
+        throw clientError;
+      }
 
-      if (!client) {
+      if (!clients || clients.length === 0) {
         toast({
           title: "Cliente não encontrado",
           description: "Não encontramos nenhum agendamento com este número.",
@@ -80,8 +92,31 @@ const ClientAppointments = () => {
         return;
       }
 
+      // Se houver múltiplos clientes, usar o primeiro
+      const client = clients[0];
+      
+      if (clients.length > 1) {
+        console.warn(`⚠️ Encontrados ${clients.length} clientes com WhatsApp ${normalizedWhatsapp}. Usando o primeiro.`);
+      }
+
+      // Validar que todos os parâmetros existem antes de redirecionar
+      if (!client.barbershop_id || !barbershopSlug) {
+        console.error("Missing parameters:", { 
+          barbershop_id: client.barbershop_id, 
+          barbershopSlug 
+        });
+        toast({
+          title: "Erro ao carregar dados",
+          description: "Dados da barbearia incompletos",
+          variant: "destructive",
+        });
+        navigate("/");
+        return;
+      }
+
       const dashboardUrl = `/client-dashboard?whatsapp=${encodeURIComponent(normalizedWhatsapp)}&barbershop_id=${client.barbershop_id}&barbershop_slug=${barbershopSlug}`;
       
+      console.log("Redirecting to:", dashboardUrl);
       navigate(dashboardUrl);
 
     } catch (error: any) {
@@ -98,14 +133,13 @@ const ClientAppointments = () => {
   };
 
   return (
-    <div className="flex justify-center items-center h-screen"> 
-    {/* Adicionei uma div de abertura com classes de exemplo */}
-    <div className="p-4 text-center">
-      <p>
-        {loading ? "Carregando seus agendamentos..." : "Redirecionando..."}
-      </p>
+    <div className="flex justify-center items-center h-screen">
+      <div className="p-4 text-center">
+        <p>
+          {loading ? "Carregando seus agendamentos..." : "Redirecionando..."}
+        </p>
+      </div>
     </div>
-  </div>
   );
 };
 
