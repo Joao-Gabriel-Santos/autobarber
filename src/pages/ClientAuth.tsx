@@ -36,11 +36,30 @@ const ClientAuth = () => {
   }, [barberSlug]);
 
   const maskDate = (value) => {
-  return value
-    .replace(/\D/g, "") // Remove tudo que não é número
-    .replace(/(\d{2})(\d)/, "$1/$2") // Coloca a barra após os 2 primeiros números
-    .replace(/(\d{2})(\d)/, "$1/$2") // Coloca a segunda barra após os próximos 2 números
-    .replace(/(\d{4})(\d+?)$/, "$1"); // Limita o ano a 4 dígitos
+    return value
+      .replace(/\D/g, "") // Remove tudo que não é número
+      .replace(/(\d{2})(\d)/, "$1/$2") // Coloca a barra após os 2 primeiros números
+      .replace(/(\d{2})(\d)/, "$1/$2") // Coloca a segunda barra após os próximos 2 números
+      .replace(/(\d{4})(\d+?)$/, "$1"); // Limita o ano a 4 dígitos
+  };
+
+  const convertDateToISO = (dateString: string) => {
+    // Formato esperado: DD/MM/YYYY
+    if (!dateString || dateString.length !== 10) return null;
+    
+    const [day, month, year] = dateString.split('/');
+    
+    // Validação básica
+    const dayNum = parseInt(day);
+    const monthNum = parseInt(month);
+    const yearNum = parseInt(year);
+    
+    if (dayNum < 1 || dayNum > 31) return null;
+    if (monthNum < 1 || monthNum > 12) return null;
+    if (yearNum < 1900 || yearNum > new Date().getFullYear()) return null;
+    
+    // Retorna no formato ISO: YYYY-MM-DD
+    return `${year}-${month}-${day}`;
   };
 
   const validateAndNormalize = (phone: string) => {
@@ -187,6 +206,20 @@ const ClientAuth = () => {
       return;
     }
 
+    // Validar e converter data de nascimento se fornecida
+    let birthdayISO = null;
+    if (registerData.birthday) {
+      birthdayISO = convertDateToISO(registerData.birthday);
+      if (!birthdayISO) {
+        toast({
+          title: "Data de nascimento inválida",
+          description: "Digite uma data válida no formato DD/MM/AAAA",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     setLoading(true);
 
     try {
@@ -197,7 +230,7 @@ const ClientAuth = () => {
           barbershop_id: ownerId,
           whatsapp: phoneCheck.e164,
           nome: registerData.name,
-          data_nascimento: registerData.birthday || null,
+          data_nascimento: birthdayISO,
         })
         .select()
         .single();
@@ -379,21 +412,22 @@ const ClientAuth = () => {
 
               <div>
                 <Label htmlFor="birthday" className="flex items-center gap-2">
-                Data de Nascimento *
-              </Label>
-              <Input
-                id="birthday"
-                type="text"
-                inputMode="numeric"
-                value={registerData.birthday}
-                onChange={(e) => {
-                  const maskedValue = maskDate(e.target.value);
-                  setRegisterData({ ...registerData, birthday: maskedValue });
-                }}
-                maxLength={10}
-                placeholder="00/00/0000"
-                className="bg-background"
-              />
+                  Data de Nascimento *
+                </Label>
+                <Input
+                  id="birthday"
+                  type="text"
+                  inputMode="numeric"
+                  value={registerData.birthday}
+                  onChange={(e) => {
+                    const maskedValue = maskDate(e.target.value);
+                    setRegisterData({ ...registerData, birthday: maskedValue });
+                  }}
+                  onKeyPress={handleKeyPress}
+                  maxLength={10}
+                  placeholder="00/00/0000"
+                  className="bg-background"
+                />
                 <p className="text-xs text-muted-foreground mt-1">
                   💡 Informe para ganhar descontos especiais!
                 </p>

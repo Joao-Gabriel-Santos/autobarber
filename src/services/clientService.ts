@@ -4,9 +4,8 @@ import { Client, ClientWithMetrics, ClientFilters, ClientDashboardData } from "@
 import { differenceInDays, startOfDay, parseISO } from "date-fns";
 
 export class ClientService {
-  /**
-   * Busca ou cria um cliente (upsert)
-   */
+  /** Busca ou cria um cliente (upsert) */
+
   static async upsertClient(
     barbershopId: string,
     whatsapp: string,
@@ -207,8 +206,6 @@ export class ClientService {
 
       const today = startOfDay(new Date());
       const currentMonth = new Date().getMonth();
-
-      // ✅ CORREÇÃO: Usar startOfDay para cálculo consistente
       const clientes_ativos = clients.filter((c) => {
         if (!c.data_ultimo_corte) return false;
         const lastCutDate = startOfDay(parseISO(c.data_ultimo_corte));
@@ -370,6 +367,37 @@ export class WhatsAppService {
   /**
    * Envia confirmação de agendamento via WhatsApp (simulado)
    */
+  static async sendOTP(phoneNumber: string, code: string): Promise<boolean> {
+    try {
+      // Formatar número removendo caracteres especiais
+      const cleanPhone = phoneNumber.replace(/\D/g, '');
+      
+      // Mensagem do OTP
+      const message = encodeURIComponent(
+        `🔐 *Código de Verificação*\n\n` +
+        `Seu código é: *${code}*\n\n` +
+        `⏰ Válido por 5 minutos\n` +
+        `❌ Não compartilhe este código com ninguém`
+      );
+
+      // Para desenvolvimento/teste, apenas loga no console
+      console.log(`📱 OTP enviado para ${phoneNumber}: ${code}`);
+      
+      // Em produção, você integraria com API do WhatsApp aqui:
+      // const whatsappUrl = `https://wa.me/${cleanPhone}?text=${message}`;
+      // await fetch('https://sua-api-whatsapp.com/send', { ... });
+      
+      return true;
+      
+    } catch (error) {
+      console.error("Erro ao enviar OTP:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Envia confirmação de agendamento via WhatsApp (simulado)
+   */
   static async sendAppointmentConfirmation(
     whatsapp: string,
     data: {
@@ -386,4 +414,52 @@ export class WhatsAppService {
     // Simulação de envio bem-sucedido
     return Promise.resolve();
   }
-}
+
+  /**
+   * Envia lembrete de agendamento
+   */
+  static async sendBookingReminder(
+    phoneNumber: string,
+    barbershopName: string,
+    serviceName: string,
+    date: string,
+    time: string
+  ): Promise<boolean> {
+    try {
+      const cleanPhone = phoneNumber.replace(/\D/g, '');
+      
+      console.log(`⏰ Lembrete enviado para ${phoneNumber}`);
+      console.log(`📅 ${barbershopName} - ${serviceName} - ${date} ${time}`);
+      
+      return true;
+      
+    } catch (error) {
+      console.error("Erro ao enviar lembrete:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Envia notificação de cancelamento
+   */
+  static async sendCancellationNotice(
+    phoneNumber: string,
+    barbershopName: string,
+    serviceName: string,
+    date: string,
+    time: string
+  ): Promise<boolean> {
+    try {
+      const cleanPhone = phoneNumber.replace(/\D/g, '');
+      
+      console.log(`❌ Cancelamento notificado para ${phoneNumber}`);
+      console.log(`📅 ${barbershopName} - ${serviceName} - ${date} ${time}`);
+      
+      return true;
+      
+    } catch (error) {
+      console.error("Erro ao enviar notificação de cancelamento:", error);
+      return false;
+    }
+  }
+};
