@@ -4,6 +4,18 @@ import { supabase } from '@/integrations/supabase/client';
 
 // Definição dos planos e suas features
 const PLAN_FEATURES = {
+  basic: {
+    walk_in: true,
+    services: true,
+    finance: true,
+    online_booking: false,
+    schedule: false,
+    reminders: false,
+    team_management: false,
+    custom_link: false,
+    stock: false,
+    product: false
+  },
   starter: {
     walk_in: true,
     services: true,
@@ -13,6 +25,8 @@ const PLAN_FEATURES = {
     reminders: false,
     team_management: true,
     custom_link: false,
+    stock: false,
+    product: false
   },
   
   pro: {
@@ -24,6 +38,8 @@ const PLAN_FEATURES = {
     reminders: true,
     custom_link: true,
     team_management: false,
+    stock: false,
+    product: false
   },
   
   master: {
@@ -35,6 +51,8 @@ const PLAN_FEATURES = {
     reminders: true,
     team_management: true,
     custom_link: true,
+    stock: true,
+    product: true
   },
 } as const;
 
@@ -174,6 +192,7 @@ export function useSubscription(): UseSubscriptionReturn {
 
   const getPlanName = (): string => {
     const names: Record<PlanType, string> = {
+      basic: 'Plano Basic',
       starter: 'Plano Starter',
       pro: 'Plano Pro',
       master: 'Plano Master',
@@ -211,6 +230,7 @@ export function useSubscription(): UseSubscriptionReturn {
     }
 
     const planNames: Record<PlanType, string> = {
+      basic: 'Basic',
       starter: 'Starter',
       pro: 'Pro',
       master: 'Master',
