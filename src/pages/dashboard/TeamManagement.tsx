@@ -8,10 +8,11 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeft, UserPlus, Mail, Clock, CheckCircle2, XCircle, Copy, Trash2 } from "lucide-react";
+import { ArrowLeft, UserPlus, Mail, Clock, CheckCircle2, XCircle, Copy, Trash2, Edit, DollarSign, TrendingUp, Award, Percent } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
+import { format, startOfMonth, endOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface Profile {
   id: string;
@@ -19,7 +20,7 @@ interface Profile {
   whatsapp: string;
   role: 'owner' | 'barber';
   created_at: string;
-  email?: string; // Será buscado separadamente
+  email?: string;
 }
 
 interface Invite {
@@ -31,17 +32,45 @@ interface Invite {
   created_at: string;
 }
 
+interface BarberCommission {
+  barber_id: string;
+  commission_rate: number;
+  fixed_salary: number;
+  payment_type: 'commission' | 'fixed' | 'mixed';
+  notes: string;
+}
+
+interface BarberStats {
+  id: string;
+  name: string;
+  total_appointments: number;
+  total_revenue: number;
+  commission_earned: number;
+  avg_ticket: number;
+  performance_score: number;
+}
+
 const TeamManagement = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [teamMembers, setTeamMembers] = useState<Profile[]>([]);
-  const [profile, setProfile] = useState<Profile | null>(null);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviting, setInviting] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [commissionDialogOpen, setCommissionDialogOpen] = useState(false);
+  const [selectedBarber, setSelectedBarber] = useState<string | null>(null);
+  const [barberStats, setBarberStats] = useState<BarberStats[]>([]);
+  const [activeTab, setActiveTab] = useState("members");
+  
+  const [commissionData, setCommissionData] = useState({
+    commission_rate: 50,
+    fixed_salary: 0,
+    payment_type: 'commission' as 'commission' | 'fixed' | 'mixed',
+    notes: ''
+  });
 
   useEffect(() => {
     checkUser();
@@ -55,7 +84,6 @@ const TeamManagement = () => {
         return;
       }
 
-      // Verificar se é owner
       const { data: profile } = await supabase
         .from("profiles")
         .select("role")
@@ -75,6 +103,7 @@ const TeamManagement = () => {
       setUser(user);
       await loadTeamMembers(user.id);
       await loadInvites(user.id);
+      await loadBarberStats(user.id);
     } catch (error) {
       console.error("Error:", error);
       navigate("/login");
@@ -85,7 +114,6 @@ const TeamManagement = () => {
 
   const loadTeamMembers = async (userId: string) => {
     try {
-      // Buscar perfis (dono + barbeiros da equipe)
       const { data: profiles, error } = await supabase
         .from("profiles")
         .select("id, full_name, whatsapp, role, created_at, barbershop_id")
@@ -102,23 +130,24 @@ const TeamManagement = () => {
         return;
       }
 
-      // Adicionar email apenas para o usuário logado
       const profilesWithEmails: Profile[] = [];
       const { data: { user: currentUser } } = await supabase.auth.getUser();
 
-      // Assumindo que este é o trecho de código que está causando o erro
-    const loadProfile = async (userId: string) => {
-    const { data, error } = await supabase
-        .from("profiles")
-        .select('*')
-        .eq("id", userId)
-        .maybeSingle();
-
-    if (data) {
-        // AQUI ESTÁ O ERRO: data é {..., role: string}, mas o estado espera Profile (role: 'owner'|'barber')
-        setProfile(data as Profile); // <-- Corrija aplicando a asserção
-    }
-};
+      for (const profile of profiles || []) {
+        if (profile.id === currentUser?.id) {
+          profilesWithEmails.push({
+            ...profile,
+            email: currentUser.email,
+            role: profile.role as 'owner' | 'barber'
+          });
+        } else {
+          profilesWithEmails.push({
+            ...profile,
+            email: "Email não disponível",
+            role: profile.role as 'owner' | 'barber'
+          });
+        }
+      }
 
       setTeamMembers(profilesWithEmails);
     } catch (error: any) {
@@ -128,6 +157,73 @@ const TeamManagement = () => {
         description: error.message,
         variant: "destructive",
       });
+    }
+  };
+
+  const loadBarberStats = async (ownerId: string) => {
+    try {
+      const { data: teamMembers } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .or(`id.eq.${ownerId},barbershop_id.eq.${ownerId}`);
+
+      if (!teamMembers) return;
+
+      const now = new Date();
+      const monthStart = startOfMonth(now);
+      const monthEnd = endOfMonth(now);
+
+      const stats: BarberStats[] = [];
+
+      for (const barber of teamMembers) {
+        const { data: appointments } = await supabase
+          .from("appointments")
+          .select("id, price, status")
+          .eq("barber_id", barber.id)
+          .eq("status", "completed")
+          .gte("appointment_date", format(monthStart, "yyyy-MM-dd"))
+          .lte("appointment_date", format(monthEnd, "yyyy-MM-dd"));
+
+        const totalAppointments = appointments?.length || 0;
+        const totalRevenue = appointments?.reduce((sum, a) => sum + a.price, 0) || 0;
+        const avgTicket = totalAppointments > 0 ? totalRevenue / totalAppointments : 0;
+
+        // Buscar configuração de comissão
+        const { data: commissionConfig } = await supabase
+          .from("barber_commissions")
+          .select("*")
+          .eq("barber_id", barber.id)
+          .maybeSingle();
+
+        let commissionEarned = 0;
+        if (commissionConfig) {
+          if (commissionConfig.payment_type === 'commission') {
+            commissionEarned = totalRevenue * (commissionConfig.commission_rate / 100);
+          } else if (commissionConfig.payment_type === 'fixed') {
+            commissionEarned = commissionConfig.fixed_salary;
+          } else if (commissionConfig.payment_type === 'mixed') {
+            commissionEarned = commissionConfig.fixed_salary + (totalRevenue * (commissionConfig.commission_rate / 100));
+          }
+        }
+
+        const performanceScore = (totalAppointments * 10) + (avgTicket / 10);
+
+        stats.push({
+          id: barber.id,
+          name: barber.full_name || "Sem nome",
+          total_appointments: totalAppointments,
+          total_revenue: totalRevenue,
+          commission_earned: commissionEarned,
+          avg_ticket: avgTicket,
+          performance_score: performanceScore,
+        });
+      }
+
+      stats.sort((a, b) => b.total_revenue - a.total_revenue);
+      setBarberStats(stats);
+
+    } catch (error: any) {
+      console.error("Erro ao carregar estatísticas:", error);
     }
   };
 
@@ -151,10 +247,9 @@ const TeamManagement = () => {
 
     setInviting(true);
     try {
-      // Gerar token único
       const token = crypto.randomUUID();
       const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 7); // Expira em 7 dias
+      expiresAt.setDate(expiresAt.getDate() + 7);
 
       const { error } = await supabase
         .from("barber_invites")
@@ -184,6 +279,75 @@ const TeamManagement = () => {
       });
     } finally {
       setInviting(false);
+    }
+  };
+
+  const handleOpenCommissionDialog = async (barberId: string) => {
+    setSelectedBarber(barberId);
+    
+    // Carregar configuração existente
+    const { data: existing } = await supabase
+      .from("barber_commissions")
+      .select("*")
+      .eq("barber_id", barberId)
+      .maybeSingle();
+
+    if (existing) {
+      setCommissionData({
+        commission_rate: existing.commission_rate,
+        fixed_salary: existing.fixed_salary,
+        payment_type: existing.payment_type,
+        notes: existing.notes || ''
+      });
+    } else {
+      setCommissionData({
+        commission_rate: 50,
+        fixed_salary: 0,
+        payment_type: 'commission',
+        notes: ''
+      });
+    }
+
+    setCommissionDialogOpen(true);
+  };
+
+  const handleSaveCommission = async () => {
+    if (!selectedBarber) return;
+
+    try {
+      const { data: existing } = await supabase
+        .from("barber_commissions")
+        .select("id")
+        .eq("barber_id", selectedBarber)
+        .maybeSingle();
+
+      if (existing) {
+        await supabase
+          .from("barber_commissions")
+          .update(commissionData)
+          .eq("barber_id", selectedBarber);
+      } else {
+        await supabase
+          .from("barber_commissions")
+          .insert({
+            barber_id: selectedBarber,
+            ...commissionData
+          });
+      }
+
+      toast({
+        title: "Comissão atualizada!",
+        description: "As configurações foram salvas com sucesso",
+      });
+
+      setCommissionDialogOpen(false);
+      await loadBarberStats(user.id);
+    } catch (error: any) {
+      toast({
+        title: "Erro ao salvar comissão",
+        description: error.message,
+        variant: "destructive",
+      });
     }
   };
 
@@ -239,7 +403,10 @@ const TeamManagement = () => {
         title: "Barbeiro removido da equipe",
       });
 
-      if (user) await loadTeamMembers(user.id);
+      if (user) {
+        await loadTeamMembers(user.id);
+        await loadBarberStats(user.id);
+      }
     } catch (error: any) {
       toast({
         title: "Erro ao remover barbeiro",
@@ -272,7 +439,7 @@ const TeamManagement = () => {
               <div>
                 <h1 className="text-2xl font-bold">Gerenciar Equipe</h1>
                 <p className="text-sm text-muted-foreground">
-                  Adicione e gerencie barbeiros da sua equipe
+                  Gerencie barbeiros, comissões e desempenho
                 </p>
               </div>
             </div>
@@ -319,50 +486,146 @@ const TeamManagement = () => {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8 max-w-6xl">
-        {/* Membros da Equipe */}
-        <div className="mb-8">
-          <h2 className="text-xl font-bold mb-4">Equipe Atual</h2>
-          <div className="grid md:grid-cols-2 gap-4">
-            {teamMembers.map((member) => (
-              <Card key={member.id} className="p-6 border-border bg-card">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h3 className="font-bold text-lg mb-1">
-                      {member.full_name || "Sem nome"}
-                    </h3>
-                    <p className="text-sm text-muted-foreground mb-2">
-                      {member.email}
-                    </p>
-                    <Badge variant={member.role === 'owner' ? 'default' : 'secondary'}>
-                      {member.role === 'owner' ? 'Dono' : 'Barbeiro'}
-                    </Badge>
-                  </div>
-                  {member.role === 'barber' && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeMember(member.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  <p>WhatsApp: {member.whatsapp || 'Não informado'}</p>
-                  <p>Desde: {format(new Date(member.created_at), "dd/MM/yyyy", { locale: ptBR })}</p>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
+      <main className="container mx-auto px-4 py-8 max-w-7xl">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="members">Equipe</TabsTrigger>
+            <TabsTrigger value="performance">Desempenho</TabsTrigger>
+            <TabsTrigger value="invites">Convites</TabsTrigger>
+          </TabsList>
 
-        {/* Convites Pendentes */}
-        {invites.length > 0 && (
-          <div>
-            <h2 className="text-xl font-bold mb-4">Convites Enviados</h2>
-            <div className="space-y-4">
-              {invites.map((invite) => (
+          {/* Aba de Membros */}
+          <TabsContent value="members" className="space-y-4">
+            <div className="grid md:grid-cols-2 gap-4">
+              {teamMembers.map((member) => (
+                <Card key={member.id} className="p-6 border-border bg-card">
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <h3 className="font-bold text-lg mb-1">
+                        {member.full_name || "Sem nome"}
+                      </h3>
+                      <p className="text-sm text-muted-foreground mb-2">
+                        {member.email}
+                      </p>
+                      <Badge variant={member.role === 'owner' ? 'default' : 'secondary'}>
+                        {member.role === 'owner' ? 'Dono' : 'Barbeiro'}
+                      </Badge>
+                    </div>
+                    <div className="flex gap-2">
+                      {member.role === 'barber' && (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => handleOpenCommissionDialog(member.id)}
+                          >
+                            <DollarSign className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeMember(member.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    <p>WhatsApp: {member.whatsapp || 'Não informado'}</p>
+                    <p>Desde: {format(new Date(member.created_at), "dd/MM/yyyy", { locale: ptBR })}</p>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </TabsContent>
+
+          {/* Aba de Desempenho */}
+          <TabsContent value="performance" className="space-y-4">
+            <div className="grid gap-4">
+              {barberStats.map((barber, index) => (
+                <Card key={barber.id} className="p-6 border-border bg-card hover:border-primary/50 transition-all">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-gradient-gold flex items-center justify-center font-bold">
+                        {index + 1}
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-lg">{barber.name}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Período: {format(startOfMonth(new Date()), "dd/MM")} - {format(endOfMonth(new Date()), "dd/MM")}
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleOpenCommissionDialog(barber.id)}
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      Comissão
+                    </Button>
+                  </div>
+
+                  <div className="grid md:grid-cols-4 gap-4">
+                    <div>
+                      <div className="flex items-center gap-1 mb-1">
+                        <DollarSign className="h-4 w-4 text-primary" />
+                        <p className="text-xs text-muted-foreground">Receita Gerada</p>
+                      </div>
+                      <p className="text-xl font-bold text-primary">
+                        R$ {barber.total_revenue.toFixed(2)}
+                      </p>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center gap-1 mb-1">
+                        <Percent className="h-4 w-4 text-green-500" />
+                        <p className="text-xs text-muted-foreground">A Receber</p>
+                      </div>
+                      <p className="text-xl font-bold text-green-500">
+                        R$ {barber.commission_earned.toFixed(2)}
+                      </p>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center gap-1 mb-1">
+                        <TrendingUp className="h-4 w-4 text-blue-500" />
+                        <p className="text-xs text-muted-foreground">Atendimentos</p>
+                      </div>
+                      <p className="text-xl font-bold">
+                        {barber.total_appointments}
+                      </p>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center gap-1 mb-1">
+                        <Award className="h-4 w-4 text-orange-500" />
+                        <p className="text-xs text-muted-foreground">Ticket Médio</p>
+                      </div>
+                      <p className="text-xl font-bold">
+                        R$ {barber.avg_ticket.toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+
+              {barberStats.length === 0 && (
+                <Card className="p-12 text-center border-border bg-card">
+                  <p className="text-muted-foreground">
+                    Nenhum dado de desempenho disponível ainda.
+                  </p>
+                </Card>
+              )}
+            </div>
+          </TabsContent>
+
+          {/* Aba de Convites */}
+          <TabsContent value="invites" className="space-y-4">
+            {invites.length > 0 ? (
+              invites.map((invite) => (
                 <Card key={invite.id} className="p-6 border-border bg-card">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -413,10 +676,106 @@ const TeamManagement = () => {
                     </div>
                   </div>
                 </Card>
-              ))}
+              ))
+            ) : (
+              <Card className="p-12 text-center border-border bg-card">
+                <p className="text-muted-foreground">
+                  Nenhum convite enviado ainda.
+                </p>
+              </Card>
+            )}
+          </TabsContent>
+        </Tabs>
+
+        {/* Dialog de Comissão */}
+        <Dialog open={commissionDialogOpen} onOpenChange={setCommissionDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Configurar Comissão</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>Tipo de Pagamento</Label>
+                <div className="grid grid-cols-3 gap-2 mt-2">
+                  <Button
+                    variant={commissionData.payment_type === 'commission' ? 'default' : 'outline'}
+                    onClick={() => setCommissionData({ ...commissionData, payment_type: 'commission' })}
+                  >
+                    Comissão
+                  </Button>
+                  <Button
+                    variant={commissionData.payment_type === 'fixed' ? 'default' : 'outline'}
+                    onClick={() => setCommissionData({ ...commissionData, payment_type: 'fixed' })}
+                  >
+                    Fixo
+                  </Button>
+                  <Button
+                    variant={commissionData.payment_type === 'mixed' ? 'default' : 'outline'}
+                    onClick={() => setCommissionData({ ...commissionData, payment_type: 'mixed' })}
+                  >
+                    Misto
+                  </Button>
+                </div>
+              </div>
+
+              {(commissionData.payment_type === 'commission' || commissionData.payment_type === 'mixed') && (
+                <div>
+                  <Label htmlFor="commission_rate">Porcentagem de Comissão (%)</Label>
+                  <Input
+                    id="commission_rate"
+                    type="number"
+                    value={commissionData.commission_rate}
+                    onChange={(e) => setCommissionData({ ...commissionData, commission_rate: parseFloat(e.target.value) })}
+                    min="0"
+                    max="100"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Ex: 50% significa que o barbeiro recebe metade do valor de cada serviço
+                  </p>
+                </div>
+              )}
+
+              {(commissionData.payment_type === 'fixed' || commissionData.payment_type === 'mixed') && (
+                <div>
+                  <Label htmlFor="fixed_salary">Salário Fixo (R$)</Label>
+                  <Input
+                    id="fixed_salary"
+                    type="number"
+                    value={commissionData.fixed_salary}
+                    onChange={(e) => setCommissionData({ ...commissionData, fixed_salary: parseFloat(e.target.value) })}
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+              )}
+
+              <div>
+                <Label htmlFor="notes">Observações</Label>
+                <Input
+                  id="notes"
+                  value={commissionData.notes}
+                  onChange={(e) => setCommissionData({ ...commissionData, notes: e.target.value })}
+                  placeholder="Detalhes do acordo, condições especiais..."
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <Button
+                  onClick={handleSaveCommission}
+                  className="flex-1"
+                >
+                  Salvar Configuração
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setCommissionDialogOpen(false)}
+                >
+                  Cancelar
+                </Button>
+              </div>
             </div>
-          </div>
-        )}
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   );

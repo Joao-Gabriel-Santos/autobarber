@@ -3,8 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Search, Users, Calendar, TrendingUp, Gift, Filter, Phone, MessageCircle } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { ArrowLeft, Search, Users, Calendar, TrendingUp, Gift, Phone, MessageCircle, UserPlus } from "lucide-react";
 import { ClientService } from "@/services/clientService";
 import { ClientWithMetrics, ClientFilters } from "@/types/client";
 import { format, isValid } from "date-fns";
@@ -21,6 +23,8 @@ const ClientsManagement = () => {
   const [loading, setLoading] = useState(true);
   const [clients, setClients] = useState<ClientWithMetrics[]>([]);
   const [stats, setStats] = useState<any>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
   
   const [filters, setFilters] = useState<ClientFilters>({
     search: "",
@@ -28,6 +32,14 @@ const ClientsManagement = () => {
     aniversariantes: false,
     sortBy: "nome",
     sortOrder: "asc"
+  });
+
+  const [newClient, setNewClient] = useState({
+    name: "",
+    whatsapp: "",
+    birthdate: "",
+    email: "",
+    notes: ""
   });
 
   useEffect(() => {
@@ -90,6 +102,58 @@ const ClientsManagement = () => {
     setStats(data);
   };
 
+  const handleSaveClient = async () => {
+    if (!newClient.name || !newClient.whatsapp) {
+      toast({
+        title: "Campos obrigatórios",
+        description: "Preencha pelo menos o nome e WhatsApp do cliente",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from("clients")
+        .insert({
+          barber_id: user.id,
+          name: newClient.name,
+          whatsapp: newClient.whatsapp,
+          birthdate: newClient.birthdate || null,
+          email: newClient.email || null,
+          notes: newClient.notes || null,
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "✅ Cliente cadastrado!",
+        description: `${newClient.name} foi adicionado à sua base de clientes`,
+      });
+
+      setDialogOpen(false);
+      setNewClient({
+        name: "",
+        whatsapp: "",
+        birthdate: "",
+        email: "",
+        notes: ""
+      });
+
+      loadClients();
+      loadStats();
+    } catch (error: any) {
+      toast({
+        title: "Erro ao cadastrar cliente",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return "—";
     try {
@@ -124,16 +188,108 @@ const ClientsManagement = () => {
       {/* Header */}
       <header className="border-b border-border bg-card/50 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard")}>
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <div>
-              <h1 className="text-2xl font-bold">Gerenciar Clientes</h1>
-              <p className="text-sm text-muted-foreground">
-                Visualize e gerencie sua base de clientes
-              </p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard")}>
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+              <div>
+                <h1 className="text-2xl font-bold">Gerenciar Clientes</h1>
+                <p className="text-sm text-muted-foreground">
+                  Visualize e gerencie sua base de clientes
+                </p>
+              </div>
             </div>
+
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="shadow-gold">
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Cadastrar Cliente
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Cadastro Manual de Cliente</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+                    <p className="text-sm text-blue-600 dark:text-blue-400">
+                      💡 Use este formulário para cadastrar clientes que não têm familiaridade com tecnologia
+                    </p>
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="name">Nome Completo *</Label>
+                      <Input
+                        id="name"
+                        value={newClient.name}
+                        onChange={(e) => setNewClient({ ...newClient, name: e.target.value })}
+                        placeholder="João da Silva"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="whatsapp">WhatsApp *</Label>
+                      <Input
+                        id="whatsapp"
+                        value={newClient.whatsapp}
+                        onChange={(e) => setNewClient({ ...newClient, whatsapp: e.target.value })}
+                        placeholder="(11) 98765-4321"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="birthdate">Data de Nascimento</Label>
+                      <Input
+                        id="birthdate"
+                        type="date"
+                        value={newClient.birthdate}
+                        onChange={(e) => setNewClient({ ...newClient, birthdate: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="email">E-mail</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        value={newClient.email}
+                        onChange={(e) => setNewClient({ ...newClient, email: e.target.value })}
+                        placeholder="cliente@email.com"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="notes">Observações</Label>
+                    <Input
+                      id="notes"
+                      value={newClient.notes}
+                      onChange={(e) => setNewClient({ ...newClient, notes: e.target.value })}
+                      placeholder="Preferências, alergias, observações..."
+                    />
+                  </div>
+
+                  <div className="flex gap-3 pt-4">
+                    <Button
+                      onClick={handleSaveClient}
+                      disabled={saving || !newClient.name || !newClient.whatsapp}
+                      className="flex-1"
+                    >
+                      {saving ? "Salvando..." : "Cadastrar Cliente"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setDialogOpen(false)}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
       </header>

@@ -4,11 +4,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, TrendingUp, DollarSign, Clock, Award, Calendar } from "lucide-react";
+import { ArrowLeft, TrendingUp, DollarSign, Clock, Award, Calendar, Users, Trophy, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, subMonths } from "date-fns";
+import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, subMonths, differenceInMinutes } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { usePermissions } from "@/hooks/usePermissions";
 
 interface Appointment {
@@ -17,9 +17,11 @@ interface Appointment {
   appointment_time: string;
   price: number;
   status: string;
+  barber_id: string;
   services: {
     id: string;
     name: string;
+    duration: number;
   };
 }
 
@@ -32,6 +34,17 @@ interface ServiceStats {
 interface HourStats {
   hour: string;
   count: number;
+}
+
+interface BarberPerformance {
+  id: string;
+  name: string;
+  total_appointments: number;
+  total_revenue: number;
+  avg_ticket: number;
+  completion_rate: number;
+  total_hours_worked: number;
+  efficiency_score: number;
 }
 
 const COLORS = ['#FFD700', '#FFA500', '#FF8C00', '#FF6B35', '#FF4500'];
@@ -53,8 +66,8 @@ const Finance = () => {
   const [weeklyData, setWeeklyData] = useState<any[]>([]);
   const [monthlyData, setMonthlyData] = useState<any[]>([]);
   const [lastMonthRevenue, setLastMonthRevenue] = useState(0);
+  const [barberPerformances, setBarberPerformances] = useState<BarberPerformance[]>([]);
 
-  // ✅ IMPORTANTE: Aguardar permissions antes de definir isOwner/isBarber
   const isOwner = !permissionsLoading && permissions?.role === 'owner';
   const isBarber = !permissionsLoading && permissions?.role === 'barber';
 
@@ -78,29 +91,92 @@ const Finance = () => {
     }
   };
 
-  // ✅ CORREÇÃO: Aguardar permissions antes de carregar dados
   useEffect(() => {
     if (user && !permissionsLoading && permissions) {
-      console.log("✅ Permissions carregadas, buscando dados financeiros...");
       loadFinancialData(user.id);
+      if (isOwner) {
+        loadBarberPerformances(user.id);
+      }
     }
   }, [user, permissionsLoading, permissions]);
 
-  const loadFinancialData = async (userId: string) => {
+  const loadBarberPerformances = async (ownerId: string) => {
     try {
-      console.log("=== FINANCE DEBUG ===");
-      console.log("User ID:", userId);
-      console.log("Permissions:", permissions);
-      console.log("isOwner:", isOwner);
-      console.log("isBarber:", isBarber);
+      // Buscar todos os barbeiros da equipe
+      const { data: teamMembers } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .or(`id.eq.${ownerId},barbershop_id.eq.${ownerId}`);
 
-      // ✅ VALIDAÇÃO: Garantir que permissions foi carregado
-      if (!permissions) {
-        console.log("⚠️ Permissions ainda não carregadas, aguardando...");
-        return;
+      if (!teamMembers) return;
+
+      const now = new Date();
+      const monthStart = startOfMonth(now);
+      const monthEnd = endOfMonth(now);
+
+      const performances: BarberPerformance[] = [];
+
+      for (const barber of teamMembers) {
+        // Buscar agendamentos do barbeiro no mês
+        const { data: appointments } = await supabase
+          .from("appointments")
+          .select(`
+            id,
+            appointment_date,
+            appointment_time,
+            price,
+            status,
+            services (
+              duration
+            )
+          `)
+          .eq("barber_id", barber.id)
+          .gte("appointment_date", format(monthStart, "yyyy-MM-dd"))
+          .lte("appointment_date", format(monthEnd, "yyyy-MM-dd"));
+
+        const completed = appointments?.filter(a => a.status === "completed") || [];
+        const totalAppointments = appointments?.length || 0;
+        const totalRevenue = completed.reduce((sum, a) => sum + a.price, 0);
+        const avgTicket = completed.length > 0 ? totalRevenue / completed.length : 0;
+        const completionRate = totalAppointments > 0 
+          ? (completed.length / totalAppointments) * 100 
+          : 0;
+
+        // Calcular horas trabalhadas (estimativa baseada na duração dos serviços)
+        const totalMinutes = completed.reduce((sum, a) => {
+          return sum + (a.services?.duration || 30);
+        }, 0);
+        const totalHours = totalMinutes / 60;
+
+        // Score de eficiência (combina receita por hora e taxa de conclusão)
+        const revenuePerHour = totalHours > 0 ? totalRevenue / totalHours : 0;
+        const efficiencyScore = (revenuePerHour * 0.7) + (completionRate * 0.3);
+
+        performances.push({
+          id: barber.id,
+          name: barber.full_name || "Sem nome",
+          total_appointments: completed.length,
+          total_revenue: totalRevenue,
+          avg_ticket: avgTicket,
+          completion_rate: completionRate,
+          total_hours_worked: totalHours,
+          efficiency_score: efficiencyScore,
+        });
       }
 
-      // Buscar agendamentos
+      // Ordenar por receita total
+      performances.sort((a, b) => b.total_revenue - a.total_revenue);
+      setBarberPerformances(performances);
+
+    } catch (error: any) {
+      console.error("Erro ao carregar desempenho dos barbeiros:", error);
+    }
+  };
+
+  const loadFinancialData = async (userId: string) => {
+    try {
+      if (!permissions) return;
+
       let query = supabase
         .from("appointments")
         .select(`
@@ -112,18 +188,15 @@ const Finance = () => {
           barber_id,
           services (
             id,
-            name
+            name,
+            duration
           )
         `)
         .eq("status", "completed");
 
-      // ✅ CORREÇÃO: Aplicar filtro correto baseado no role
       if (permissions.role === 'barber') {
-        // Barbeiro: Apenas seus próprios agendamentos
         query = query.eq("barber_id", userId);
-        console.log("🔍 Barbeiro: Filtrando apenas agendamentos de", userId);
       } else if (permissions.role === 'owner') {
-        // Owner: Todos os agendamentos da equipe
         const { data: teamMembers } = await supabase
           .from("profiles")
           .select("id")
@@ -131,21 +204,11 @@ const Finance = () => {
         
         const barberIds = teamMembers?.map(m => m.id) || [userId];
         query = query.in("barber_id", barberIds);
-        console.log("🔍 Owner: Filtrando agendamentos de", barberIds.length, "barbeiros:", barberIds);
-      } else {
-        console.error("❌ Role desconhecido:", permissions.role);
-        return;
       }
 
       const { data: appointments, error } = await query;
 
-      if (error) {
-        console.error("❌ Erro ao buscar agendamentos:", error);
-        throw error;
-      }
-
-      console.log("✅ Total de agendamentos encontrados:", appointments?.length || 0);
-      console.log("======================");
+      if (error) throw error;
 
       const now = new Date();
       const weekStart = startOfWeek(now, { locale: ptBR });
@@ -362,10 +425,15 @@ const Finance = () => {
 
         {/* Tabs com Gráficos */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className={`grid w-full ${isOwner ? 'grid-cols-4' : 'grid-cols-3'}`}>
             <TabsTrigger value="overview">Visão Geral</TabsTrigger>
             <TabsTrigger value="services">Serviços</TabsTrigger>
             <TabsTrigger value="schedule">Horários</TabsTrigger>
+            {isOwner && (
+              <TabsTrigger value="team">
+                Desempenho da Equipe
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
@@ -481,6 +549,106 @@ const Finance = () => {
               </p>
             </Card>
           </TabsContent>
+
+          {isOwner && (
+            <TabsContent value="team" className="space-y-6">
+              <div className="grid gap-4">
+                {barberPerformances.map((barber, index) => (
+                  <Card key={barber.id} className="p-6 border-border bg-card hover:border-primary/50 transition-all">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="h-12 w-12 rounded-full bg-gradient-gold flex items-center justify-center font-bold text-lg">
+                          {index + 1}
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-lg">{barber.name}</h3>
+                          <p className="text-sm text-muted-foreground">
+                            Desempenho do mês atual
+                          </p>
+                        </div>
+                      </div>
+                      {index === 0 && (
+                        <Trophy className="h-8 w-8 text-primary" />
+                      )}
+                    </div>
+
+                    <div className="grid md:grid-cols-5 gap-4">
+                      <div>
+                        <div className="flex items-center gap-1 mb-1">
+                          <DollarSign className="h-4 w-4 text-primary" />
+                          <p className="text-xs text-muted-foreground">Receita Total</p>
+                        </div>
+                        <p className="text-xl font-bold text-primary">
+                          R$ {barber.total_revenue.toFixed(2)}
+                        </p>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center gap-1 mb-1">
+                          <TrendingUp className="h-4 w-4 text-green-500" />
+                          <p className="text-xs text-muted-foreground">Atendimentos</p>
+                        </div>
+                        <p className="text-xl font-bold">
+                          {barber.total_appointments}
+                        </p>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center gap-1 mb-1">
+                          <Award className="h-4 w-4 text-blue-500" />
+                          <p className="text-xs text-muted-foreground">Ticket Médio</p>
+                        </div>
+                        <p className="text-xl font-bold">
+                          R$ {barber.avg_ticket.toFixed(2)}
+                        </p>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center gap-1 mb-1">
+                          <Clock className="h-4 w-4 text-orange-500" />
+                          <p className="text-xs text-muted-foreground">Horas Trabalhadas</p>
+                        </div>
+                        <p className="text-xl font-bold">
+                          {barber.total_hours_worked.toFixed(1)}h
+                        </p>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center gap-1 mb-1">
+                          <Zap className="h-4 w-4 text-yellow-500" />
+                          <p className="text-xs text-muted-foreground">Score Eficiência</p>
+                        </div>
+                        <p className="text-xl font-bold">
+                          {barber.efficiency_score.toFixed(0)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 pt-4 border-t border-border">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Taxa de Conclusão</span>
+                        <span className="font-semibold">{barber.completion_rate.toFixed(1)}%</span>
+                      </div>
+                      <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-gold transition-all"
+                          style={{ width: `${barber.completion_rate}%` }}
+                        />
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+
+                {barberPerformances.length === 0 && (
+                  <Card className="p-12 text-center border-border bg-card">
+                    <p className="text-muted-foreground">
+                      Nenhum dado de desempenho disponível ainda.
+                    </p>
+                  </Card>
+                )}
+              </div>
+            </TabsContent>
+          )}
         </Tabs>
       </main>
     </div>
