@@ -5,11 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Calendar, Clock, User, Phone, MessageCircle, Edit } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { ArrowLeft, Calendar, Clock, User, Phone, MessageCircle, Edit, BookAIcon, Book, BookCheck, Clipboard, ClipboardCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import EditAppointmentDialog from "@/components/EditAppointmentDialog";
+import BookAppointment from "../BookAppointment";
 
 interface Appointment {
   id: string;
@@ -306,6 +308,19 @@ Qualquer imprevisto é só avisar. Obrigado!`);
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <h1 className="text-2xl font-bold">Meus Agendamentos</h1>
+            <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="shadow-gold">
+                  <ClipboardCheck className="h-4 w-4 mr-2" />
+                  Realizar Agendamento
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                    <DialogTitle>Cadastro Manual</DialogTitle>
+              </DialogHeader>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
       </header>
