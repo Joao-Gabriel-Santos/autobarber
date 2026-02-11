@@ -42,6 +42,49 @@ const ClientsManagement = () => {
     notes: ""
   });
 
+  // Função para aplicar máscara de data (DD/MM/YYYY)
+  const maskDate = (value: string): string => {
+    const numbers = value.replace(/\D/g, '');
+    
+    if (numbers.length <= 2) {
+      return numbers;
+    } else if (numbers.length <= 4) {
+      return `${numbers.slice(0, 2)}/${numbers.slice(2)}`;
+    } else {
+      return `${numbers.slice(0, 2)}/${numbers.slice(2, 4)}/${numbers.slice(4, 8)}`;
+    }
+  };
+
+  // Função para validar apenas números
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const char = String.fromCharCode(e.which);
+    if (!/[0-9]/.test(char)) {
+      e.preventDefault();
+    }
+  };
+
+  // Função para converter DD/MM/YYYY para YYYY-MM-DD
+  const convertDateToISO = (dateStr: string): string | null => {
+    if (!dateStr || dateStr.length !== 10) return null;
+    
+    const parts = dateStr.split('/');
+    if (parts.length !== 3) return null;
+    
+    const [day, month, year] = parts;
+    if (day.length !== 2 || month.length !== 2 || year.length !== 4) return null;
+    
+    // Validar valores
+    const dayNum = parseInt(day);
+    const monthNum = parseInt(month);
+    const yearNum = parseInt(year);
+    
+    if (dayNum < 1 || dayNum > 31 || monthNum < 1 || monthNum > 12 || yearNum < 1900) {
+      return null;
+    }
+    
+    return `${year}-${month}-${day}`;
+  };
+
   useEffect(() => {
     checkUser();
   }, []);
@@ -112,18 +155,63 @@ const ClientsManagement = () => {
       return;
     }
 
+    // Validar email se fornecido
+    if (newClient.email && !newClient.email.includes('@')) {
+      toast({
+        title: "Email inválido",
+        description: "Por favor, insira um email válido",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validar e converter data de nascimento se fornecida
+    let birthdateISO = null;
+    if (newClient.birthdate) {
+      if (newClient.birthdate.length !== 10) {
+        toast({
+          title: "Data de nascimento inválida",
+          description: "Use o formato DD/MM/YYYY",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      birthdateISO = convertDateToISO(newClient.birthdate);
+      if (!birthdateISO) {
+        toast({
+          title: "Data de nascimento inválida",
+          description: "Verifique a data informada",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     setSaving(true);
     try {
+      const clientData: any = {
+        barbershop_id: user.id, // CORRIGIDO: era barber_id, agora é barbershop_id
+        nome: newClient.name, // CORRIGIDO: era name, agora é nome
+        whatsapp: newClient.whatsapp,
+      };
+
+      // Adicionar campos opcionais apenas se preenchidos
+      if (birthdateISO) {
+        clientData.data_nascimento = birthdateISO; // CORRIGIDO: era birthdate, agora é data_nascimento
+      }
+
+      if (newClient.email && newClient.email.trim()) {
+        clientData.email = newClient.email.trim();
+      }
+
+      if (newClient.notes && newClient.notes.trim()) {
+        clientData.notes = newClient.notes.trim();
+      }
+
       const { error } = await supabase
         .from("clients")
-        .insert({
-          barber_id: user.id,
-          name: newClient.name,
-          whatsapp: newClient.whatsapp,
-          birthdate: newClient.birthdate || null,
-          email: newClient.email || null,
-          notes: newClient.notes || null,
-        });
+        .insert(clientData);
 
       if (error) throw error;
 
@@ -244,9 +332,17 @@ const ClientsManagement = () => {
                       <Label htmlFor="birthdate">Data de Nascimento</Label>
                       <Input
                         id="birthdate"
-                        type="date"
+                        type="text"
+                        inputMode="numeric"
                         value={newClient.birthdate}
-                        onChange={(e) => setNewClient({ ...newClient, birthdate: e.target.value })}
+                        onChange={(e) => {
+                          const maskedValue = maskDate(e.target.value);
+                          setNewClient({ ...newClient, birthdate: maskedValue });
+                        }}
+                        onKeyPress={handleKeyPress}
+                        maxLength={10}
+                        placeholder="DD/MM/AAAA"
+                        className="bg-background"
                       />
                     </div>
 

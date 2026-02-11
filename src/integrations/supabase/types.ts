@@ -16,6 +16,8 @@ export type Database = {
           nome: string
           whatsapp: string
           data_nascimento: string | null
+          email: string | null
+          notes: string | null
           total_cortes: number
           data_ultimo_corte: string | null
           auth_user_id: string | null
@@ -28,6 +30,8 @@ export type Database = {
           nome: string
           whatsapp: string
           data_nascimento?: string | null
+          email?: string | null
+          notes?: string | null
           total_cortes?: number
           data_ultimo_corte?: string | null
           auth_user_id?: string | null
@@ -40,13 +44,30 @@ export type Database = {
           nome?: string
           whatsapp?: string
           data_nascimento?: string | null
+          email?: string | null
+          notes?: string | null
           total_cortes?: number
           data_ultimo_corte?: string | null
           auth_user_id?: string | null
           created_at?: string 
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "clients_barbershop_id_fkey"
+            columns: ["barbershop_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clients_auth_user_id_fkey"
+            columns: ["auth_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       barber_invites: {
         Row: {
@@ -114,7 +135,15 @@ export type Database = {
           end_time?: string
           created_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "breaks_barber_id_fkey"
+            columns: ["barber_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       appointments: {
         Row: {
@@ -123,10 +152,13 @@ export type Database = {
           service_id: string
           client_name: string
           client_whatsapp: string
+          client_email: string | null
+          client_birthday: string | null
           appointment_date: string
           appointment_time: string
           status: string
           price: number
+          services_data: Json | null
           created_at: string
           updated_at: string
           client_id: string | null
@@ -137,10 +169,13 @@ export type Database = {
           service_id: string
           client_name: string
           client_whatsapp: string
+          client_email?: string | null
+          client_birthday?: string | null
           appointment_date: string
           appointment_time: string
           status?: string
           price: number
+          services_data?: Json | null
           created_at?: string
           updated_at?: string
           client_id?: string | null
@@ -151,15 +186,25 @@ export type Database = {
           service_id?: string
           client_name?: string
           client_whatsapp?: string
+          client_email?: string | null
+          client_birthday?: string | null
           appointment_date?: string
           appointment_time?: string
           status?: string
           price?: number
+          services_data?: Json | null
           created_at?: string
           updated_at?: string
           client_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "appointments_barber_id_fkey"
+            columns: ["barber_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "appointments_service_id_fkey"
             columns: ["service_id"]
@@ -167,6 +212,13 @@ export type Database = {
             referencedRelation: "services"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "appointments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          }
         ]
       }
       barbershops: {
@@ -203,7 +255,15 @@ export type Database = {
           banner_position_y?: number
           banner_zoom?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "barbershops_barber_id_fkey"
+            columns: ["barber_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       profiles: {
         Row: {
@@ -213,6 +273,7 @@ export type Database = {
           full_name: string | null
           whatsapp: string | null
           avatar_url: string | null
+          commission_percentage: number | null
           created_at: string
           updated_at: string
         }
@@ -223,6 +284,7 @@ export type Database = {
           full_name?: string | null
           whatsapp?: string | null
           avatar_url?: string | null
+          commission_percentage?: number | null
           created_at?: string
           updated_at?: string
         }
@@ -233,10 +295,19 @@ export type Database = {
           full_name?: string | null
           whatsapp?: string | null
           avatar_url?: string | null
+          commission_percentage?: number | null
           created_at?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_barbershop_id_fkey"
+            columns: ["barbershop_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       services: {
         Row: {
@@ -272,7 +343,15 @@ export type Database = {
           updated_at?: string
           image_url?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "services_barber_id_fkey"
+            columns: ["barber_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       working_hours: {
         Row: {
@@ -302,7 +381,15 @@ export type Database = {
           active?: boolean
           created_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "working_hours_barber_id_fkey"
+            columns: ["barber_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       subscriptions: {
         Row: {
@@ -344,7 +431,15 @@ export type Database = {
           updated_at?: string 
           cancel_at_period_end?: boolean
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
       }
     }
     Views: {
@@ -379,4 +474,3 @@ export type Database = {
     }
   }
 }
-

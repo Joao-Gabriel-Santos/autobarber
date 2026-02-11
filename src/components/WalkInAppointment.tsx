@@ -40,7 +40,9 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
   const [services, setServices] = useState<Service[]>([]);
   const [selectedServices, setSelectedServices] = useState<SelectedService[]>([]);
   const [clientName, setClientName] = useState("");
+  const [clientEmail, setClientEmail] = useState("");
   const [clientWhatsapp, setClientWhatsapp] = useState("");
+  const [clientBirthday, setClientBirthday] = useState("");
   const [startTime, setStartTime] = useState<string>("");
   const [endTime, setEndTime] = useState<string>("");
 
@@ -49,7 +51,6 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
   useEffect(() => {
     if (open) {
       loadServices();
-      // Setar hora atual como início
       const now = new Date();
       const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
       setStartTime(currentTime);
@@ -66,14 +67,51 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
     setServices(data || []);
   };
 
+  const maskDate = (value: string): string => {
+    const numbers = value.replace(/\D/g, '');
+    
+    if (numbers.length <= 2) {
+      return numbers;
+    } else if (numbers.length <= 4) {
+      return `${numbers.slice(0, 2)}/${numbers.slice(2)}`;
+    } else {
+      return `${numbers.slice(0, 2)}/${numbers.slice(2, 4)}/${numbers.slice(4, 8)}`;
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const char = String.fromCharCode(e.which);
+    if (!/[0-9]/.test(char)) {
+      e.preventDefault();
+    }
+  };
+
+  const convertDateToISO = (dateStr: string): string | null => {
+    if (!dateStr || dateStr.length !== 10) return null;
+    
+    const parts = dateStr.split('/');
+    if (parts.length !== 3) return null;
+    
+    const [day, month, year] = parts;
+    if (day.length !== 2 || month.length !== 2 || year.length !== 4) return null;
+    
+    const dayNum = parseInt(day);
+    const monthNum = parseInt(month);
+    const yearNum = parseInt(year);
+    
+    if (dayNum < 1 || dayNum > 31 || monthNum < 1 || monthNum > 12 || yearNum < 1900) {
+      return null;
+    }
+    
+    return `${year}-${month}-${day}`;
+  };
+
   const toggleService = (service: Service) => {
     const exists = selectedServices.find(s => s.service_id === service.id);
     
     if (exists) {
-      // Remove o serviço
       setSelectedServices(selectedServices.filter(s => s.service_id !== service.id));
     } else {
-      // Adiciona o serviço com quantidade 1
       setSelectedServices([
         ...selectedServices,
         {
@@ -118,13 +156,43 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
     if (selectedServices.length === 0 || !clientName || !startTime || !endTime) {
       toast({
         title: "Preencha todos os campos",
-        description: "Selecione pelo menos um serviço e preencha os horários",
+        description: "Selecione pelo menos um serviço e preencha os campos obrigatórios",
         variant: "destructive",
       });
       return;
     }
 
-    // Validar que o horário de fim é depois do início
+    if (clientEmail && clientEmail.trim() && !clientEmail.includes('@')) {
+      toast({
+        title: "Email inválido",
+        description: "Por favor, insira um email válido",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    let birthdayISO = null;
+    if (clientBirthday && clientBirthday.trim()) {
+      if (clientBirthday.length !== 10) {
+        toast({
+          title: "Data de nascimento inválida",
+          description: "Use o formato DD/MM/AAAA",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      birthdayISO = convertDateToISO(clientBirthday);
+      if (!birthdayISO) {
+        toast({
+          title: "Data de nascimento inválida",
+          description: "Verifique a data informada",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     if (endTime <= startTime) {
       toast({
         title: "Horário inválido",
@@ -139,20 +207,29 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
       const today = formatDate(new Date());
       const { totalPrice } = calculateTotals();
 
-      // Criar o agendamento com múltiplos serviços
+      const appointmentData: any = {
+        barber_id: barberId,
+        service_id: selectedServices[0].service_id,
+        client_name: clientName,
+        client_whatsapp: clientWhatsapp || "Sem WhatsApp",
+        appointment_date: today,
+        appointment_time: startTime,
+        price: totalPrice,
+        status: "completed",
+        services_data: selectedServices,
+      };
+
+      if (clientEmail && clientEmail.trim()) {
+        appointmentData.client_email = clientEmail.trim();
+      }
+
+      if (birthdayISO) {
+        appointmentData.client_birthday = birthdayISO;
+      }
+
       const { error } = await supabase
         .from("appointments")
-        .insert({
-          barber_id: barberId,
-          service_id: selectedServices[0].service_id, // Serviço principal (primeiro da lista)
-          client_name: clientName,
-          client_whatsapp: clientWhatsapp || "Sem WhatsApp",
-          appointment_date: today,
-          appointment_time: startTime,
-          price: totalPrice,
-          status: "completed",
-          services_data: selectedServices, // Armazena todos os serviços no campo JSON
-        });
+        .insert(appointmentData);
 
       if (error) throw error;
 
@@ -164,10 +241,11 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
       setOpen(false);
       onSuccess();
       
-      // Reset
       setSelectedServices([]);
       setClientName("");
+      setClientEmail("");
       setClientWhatsapp("");
+      setClientBirthday("");
       setStartTime("");
       setEndTime("");
     } catch (error: any) {
@@ -210,11 +288,9 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
               </div>
             )}
 
-            {/* Seleção de Serviços */}
             <div className="space-y-3">
               <Label className="text-base font-semibold">Serviços</Label>
               
-              {/* Lista de serviços disponíveis */}
               <Card className="p-4 border-border bg-card/50">
                 <p className="text-sm text-muted-foreground mb-3">
                   Selecione os serviços realizados:
@@ -246,7 +322,6 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
                 </div>
               </Card>
 
-              {/* Serviços selecionados com quantidade */}
               {selectedServices.length > 0 && (
                 <Card className="p-4 border-primary/20 bg-primary/5">
                   <p className="text-sm font-semibold mb-3">Serviços Selecionados:</p>
@@ -310,39 +385,68 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
               )}
             </div>
 
-            {/* Dados do Cliente */}
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Nome do Cliente *</Label>
+                <Label htmlFor="clientName">Nome do Cliente *</Label>
                 <Input
+                  id="clientName"
                   value={clientName}
                   onChange={(e) => setClientName(e.target.value)}
                   placeholder="João Silva"
                 />
               </div>
               <div className="space-y-2">
-                <Label>WhatsApp (opcional)</Label>
+                <Label htmlFor="clientWhatsapp">WhatsApp (opcional)</Label>
                 <Input
+                  id="clientWhatsapp"
                   value={clientWhatsapp}
                   onChange={(e) => setClientWhatsapp(e.target.value)}
                   placeholder="(11) 98765-4321"
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="clientEmail">E-mail (opcional)</Label>
+                <Input
+                  id="clientEmail"
+                  type="email"
+                  value={clientEmail}
+                  onChange={(e) => setClientEmail(e.target.value)}
+                  placeholder="cliente@email.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="clientBirthday">Data de Nascimento (opcional)</Label>
+                <Input
+                  id="clientBirthday"
+                  type="text"
+                  inputMode="numeric"
+                  value={clientBirthday}
+                  onChange={(e) => {
+                    const maskedValue = maskDate(e.target.value);
+                    setClientBirthday(maskedValue);
+                  }}
+                  onKeyPress={handleKeyPress}
+                  maxLength={10}
+                  placeholder="DD/MM/AAAA"
+                  className="bg-background"
+                />
+              </div>
             </div>
 
-            {/* Horários */}
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Horário de Início *</Label>
+                <Label htmlFor="startTime">Horário de Início *</Label>
                 <Input
+                  id="startTime"
                   type="time"
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
-                <Label>Horário de Encerramento *</Label>
+                <Label htmlFor="endTime">Horário de Encerramento *</Label>
                 <Input
+                  id="endTime"
                   type="time"
                   value={endTime}
                   onChange={(e) => setEndTime(e.target.value)}
@@ -356,7 +460,6 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
               }
             </p>
 
-            {/* Ações */}
             <div className="flex gap-3 pt-4">
               <Button
                 onClick={handleSubmit}
