@@ -214,6 +214,7 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
         client_whatsapp: clientWhatsapp || "Sem WhatsApp",
         appointment_date: today,
         appointment_time: startTime,
+        end_time: endTime,
         price: totalPrice,
         status: "completed",
         services_data: selectedServices,

@@ -5,18 +5,21 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Calendar, Clock, User, Phone, MessageCircle } from "lucide-react";
+import { ArrowLeft, Calendar, Clock, User, Phone, MessageCircle, Edit } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import EditAppointmentDialog from "@/components/EditAppointmentDialog";
 
 interface Appointment {
   id: string;
   barber_id: string;
   appointment_date: string;
   appointment_time: string;
+  end_time?: string;
   client_name: string;
   client_whatsapp: string;
+  client_email?: string;
   status: string;
   price: number;
   services: {
@@ -51,6 +54,8 @@ const Appointments = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [activeTab, setActiveTab] = useState("confirmed");
   const [barbershop, setBarbershop] = useState<any>(null);
+  const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   useEffect(() => {
     checkUser();
@@ -94,8 +99,8 @@ const Appointments = () => {
 
     const uniqueData = Array.from(new Map(data.map(item => [item.id, item])).values());
   
-  setAppointments(uniqueData);
-  setLoading(false);
+    setAppointments(uniqueData);
+    setLoading(false);
   };
 
   function parseDateAsLocal(dateString: string) {
@@ -126,15 +131,28 @@ Qualquer imprevisto é só avisar. Obrigado!`);
     setIsUpdating(true);
 
     try {
+      const updateData: any = { status };
+      
+      // Se está marcando como concluído e não tem end_time, captura o horário atual
+      if (status === "completed") {
+        const appointment = appointments.find(apt => apt.id === id);
+        if (!appointment?.end_time) {
+          const now = new Date();
+          const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:00`;
+          updateData.end_time = currentTime;
+        }
+      }
+
       const { error } = await supabase
         .from("appointments")
-        .update({ status })
+        .update(updateData)
         .eq("id", id);
 
       if (error) throw error;
 
       toast({
         title: "Status atualizado!",
+        description: status === "completed" ? "Horário de encerramento registrado automaticamente" : undefined,
       });
 
       if (user) loadAppointments(user.id);
@@ -149,6 +167,11 @@ Qualquer imprevisto é só avisar. Obrigado!`);
     }
   };
 
+  const handleEdit = (appointment: Appointment) => {
+    setEditingAppointment(appointment);
+    setEditDialogOpen(true);
+  };
+
   const getFilteredAppointments = (status: string) => {
     return appointments.filter(apt => apt.status === status);
   };
@@ -159,25 +182,35 @@ Qualquer imprevisto é só avisar. Obrigado!`);
     return (
       <Card key={appointment.id} className="p-6 border-border bg-card">
         <div className="flex items-start justify-between mb-4">
-          <div>
-            {hasMultipleServices ? (
-              <>
-                <h3 className="font-bold text-lg mb-2">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-2">
+              {hasMultipleServices ? (
+                <h3 className="font-bold text-lg">
                   Múltiplos Serviços ({appointment.services_data.length})
                 </h3>
-                <div className="space-y-1">
-                  {appointment.services_data.map((svc: any, idx: number) => (
-                    <p key={idx} className="text-sm text-muted-foreground">
-                      {svc.quantity > 1 ? `${svc.quantity}x ` : ''}
-                      {svc.service_name} - R$ {(svc.price * svc.quantity).toFixed(2)}
-                    </p>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <h3 className="font-bold text-lg mb-1">
-                {appointment.services?.name || "Serviço"}
-              </h3>
+              ) : (
+                <h3 className="font-bold text-lg">
+                  {appointment.services?.name || "Serviço"}
+                </h3>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => handleEdit(appointment)}
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
+            </div>
+            {hasMultipleServices && (
+              <div className="space-y-1 mb-2">
+                {appointment.services_data.map((svc: any, idx: number) => (
+                  <p key={idx} className="text-sm text-muted-foreground">
+                    {svc.quantity > 1 ? `${svc.quantity}x ` : ''}
+                    {svc.service_name} - R$ {(svc.price * svc.quantity).toFixed(2)}
+                  </p>
+                ))}
+              </div>
             )}
             <Badge className={STATUS_COLORS[appointment.status]}>
               {STATUS_LABELS[appointment.status]}
@@ -220,7 +253,10 @@ Qualquer imprevisto é só avisar. Obrigado!`);
           </div>
           <div className="flex items-center gap-2 text-muted-foreground">
             <Clock className="h-4 w-4" />
-            <span>{appointment.appointment_time}</span>
+            <span>
+              {appointment.appointment_time}
+              {appointment.end_time && ` - ${appointment.end_time.slice(0, 5)}`}
+            </span>
           </div>
         </div>
 
@@ -340,6 +376,17 @@ Qualquer imprevisto é só avisar. Obrigado!`);
           </TabsContent>
         </Tabs>
       </main>
+
+      {editingAppointment && (
+        <EditAppointmentDialog
+          appointment={editingAppointment}
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+          onSuccess={() => {
+            if (user) loadAppointments(user.id);
+          }}
+        />
+      )}
     </div>
   );
 };

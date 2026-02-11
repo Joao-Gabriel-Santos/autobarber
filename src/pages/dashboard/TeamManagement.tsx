@@ -190,7 +190,7 @@ const TeamManagement = () => {
 
         // Buscar configuração de comissão
         const { data: commissionConfig } = await supabase
-          .from("barber_commissions")
+          .from("clients")
           .select("*")
           .eq("barber_id", barber.id)
           .maybeSingle();
