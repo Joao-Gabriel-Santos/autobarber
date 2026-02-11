@@ -3,15 +3,16 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { ArrowLeft, Calendar, Clock, User, Phone, MessageCircle, Edit, BookAIcon, Book, BookCheck, Clipboard, ClipboardCheck } from "lucide-react";
+import { ArrowLeft, Calendar, Clock, User, Phone, MessageCircle, Edit, ClipboardCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import EditAppointmentDialog from "@/components/EditAppointmentDialog";
-import BookAppointment from "../BookAppointment";
 
 interface Appointment {
   id: string;
@@ -58,9 +59,16 @@ const Appointments = () => {
   const [barbershop, setBarbershop] = useState<any>(null);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [startTime, setStartTime] = useState<string>("");
+  const [newClient, setNewClient] = useState({name: "", whatsapp: "", birthdate: ""});
+  const [endTime, setEndTime] = useState<string>("");
 
   useEffect(() => {
     checkUser();
+    const now = new Date();
+      const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    setStartTime(currentTime);
   }, []);
 
   const checkUser = async () => {
@@ -108,6 +116,41 @@ const Appointments = () => {
   function parseDateAsLocal(dateString: string) {
     return new Date(dateString + 'T12:00:00');
   }
+
+  const maskDate = (value: string) => {
+  return value
+    .replace(/\D/g, "")
+    .replace(/(\d{2})(\d)/, "$1/$2")
+    .replace(/(\d{2})(\d)/, "$1/$2")
+    .replace(/(\d{4})(\d)/, "$1");
+};
+
+const handleKeyPress = (e: React.KeyboardEvent) => {
+  if (!/[0-9]/.test(e.key)) {
+    e.preventDefault();
+  }
+};
+
+const handleSaveClient = async () => {
+  setSaving(true);
+  try {
+    // Aqui você deve decidir se quer apenas salvar o cliente 
+    // ou abrir o componente de agendamento.
+    toast({
+      title: "Cliente cadastrado!",
+      description: "Agora você pode prosseguir com o agendamento.",
+    });
+    setEditDialogOpen(false);
+  } catch (error: any) {
+    toast({
+      title: "Erro",
+      description: error.message,
+      variant: "destructive",
+    });
+  } finally {
+    setSaving(false);
+  }
+};
 
   const handleWhatsAppClick = (whatsappNumber: string, clientName: string, appointment_date: string, appointment_time: string) => {
     const cleanNumber = whatsappNumber.replace(/\D/g, '');
@@ -308,7 +351,7 @@ Qualquer imprevisto é só avisar. Obrigado!`);
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <h1 className="text-2xl font-bold">Meus Agendamentos</h1>
-            <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+            <Dialog>
               <DialogTrigger asChild>
                 <Button className="shadow-gold">
                   <ClipboardCheck className="h-4 w-4 mr-2" />
@@ -316,9 +359,77 @@ Qualquer imprevisto é só avisar. Obrigado!`);
                 </Button>
               </DialogTrigger>
               <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                    <DialogTitle>Cadastro Manual</DialogTitle>
-              </DialogHeader>
+                <DialogHeader>
+                  <DialogTitle>Agendamento Manual</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+                    <p className="text-sm text-blue-600 dark:text-blue-400">
+                      💡 Use este formulário para cadastrar clientes que não têm familiaridade com tecnologia
+                    </p>
+                  </div>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="name">Cliente</Label>
+                      <Input
+                        id="name"
+                        value={newClient.name}
+                        onChange={(e) => setNewClient({ ...newClient, name: e.target.value })}
+                        placeholder="João da Silva"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="birthdate">Serviço</Label>
+                      <Input
+                        id="birthdate"
+                        type="text"
+                        inputMode="numeric"
+                        value={newClient.birthdate}
+                        onChange={(e) => {
+                          const maskedValue = maskDate(e.target.value);
+                          setNewClient({ ...newClient, birthdate: maskedValue });
+                        }}
+                        onKeyPress={handleKeyPress}
+                        maxLength={10}
+                        placeholder="DD/MM/AAAA"
+                        className="bg-background"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="startTime">Horário de Início *</Label>
+                      <Input
+                        id="startTime"
+                        type="time"
+                        value={startTime}
+                        onChange={(e) => setStartTime(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="endTime">Horário de Encerramento *</Label>
+                      <Input
+                        id="endTime"
+                        type="time"
+                        value={endTime}
+                        onChange={(e) => setEndTime(e.target.value)}
+                      />
+                    </div>
+                    </div>
+                    <div className="flex gap-3 pt-4">
+                    <Button
+                      onClick={handleSaveClient}
+                      disabled={saving || !newClient.name || !newClient.birthdate}
+                      className="flex-1"
+                    >
+                      {saving ? "Salvando..." : "Cadastrar Cliente"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setEditDialogOpen(false)}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
               </DialogContent>
             </Dialog>
           </div>
