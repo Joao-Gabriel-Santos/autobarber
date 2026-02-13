@@ -5,11 +5,13 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { UserPlus, Plus, Minus, Trash2 } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { UserPlus, Plus, Minus, Trash2, Users, UserCheck, ChevronDown, Search, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useSubscription } from "@/hooks/useSubscription";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 interface Service {
   id: string;
@@ -26,6 +28,13 @@ interface SelectedService {
   quantity: number;
 }
 
+interface ExistingClient {
+  id: string;
+  name: string;
+  whatsapp: string;
+  email?: string;
+}
+
 interface WalkInProps {
   barberId: string;
   onSuccess: () => void;
@@ -36,9 +45,19 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
   const { currentPlan } = useSubscription();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  
+
   const [services, setServices] = useState<Service[]>([]);
   const [selectedServices, setSelectedServices] = useState<SelectedService[]>([]);
+
+  // Client type selection
+  const [clientType, setClientType] = useState<"existing" | "walkin">("walkin");
+  const [clientAccordionOpen, setClientAccordionOpen] = useState(false);
+  const [existingClients, setExistingClients] = useState<ExistingClient[]>([]);
+  const [clientSearch, setClientSearch] = useState("");
+  const [selectedExistingClient, setSelectedExistingClient] = useState<ExistingClient | null>(null);
+  const [loadingClients, setLoadingClients] = useState(false);
+
+  // Form fields
   const [clientName, setClientName] = useState("");
   const [clientEmail, setClientEmail] = useState("");
   const [clientWhatsapp, setClientWhatsapp] = useState("");
@@ -57,58 +76,104 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
     }
   }, [open]);
 
+  useEffect(() => {
+    if (clientType === "existing" && clientAccordionOpen) {
+      loadExistingClients();
+    }
+  }, [clientType, clientAccordionOpen]);
+
+  // Reset client state when switching type
+  useEffect(() => {
+    setSelectedExistingClient(null);
+    setClientSearch("");
+    setClientName("");
+    setClientEmail("");
+    setClientWhatsapp("");
+    setClientBirthday("");
+  }, [clientType]);
+
   const loadServices = async () => {
     const { data } = await supabase
       .from("services")
       .select("*")
       .eq("barber_id", barberId)
       .eq("active", true);
-    
+
     setServices(data || []);
+  };
+
+  const loadExistingClients = async () => {
+    setLoadingClients(true);
+    try {
+      // Fetch distinct clients from past appointments for this barber
+      const { data } = await supabase
+        .from("appointments")
+        .select("client_name, client_whatsapp, client_email")
+        .eq("barber_id", barberId)
+        .not("client_name", "is", null)
+        .not("client_whatsapp", "eq", "Sem WhatsApp")
+        .order("client_name", { ascending: true });
+
+      if (data) {
+        // Deduplicate by whatsapp
+        const seen = new Set<string>();
+        const unique: ExistingClient[] = [];
+        data.forEach((row, idx) => {
+          const key = row.client_whatsapp || row.client_name;
+          if (!seen.has(key)) {
+            seen.add(key);
+            unique.push({
+              id: `${idx}-${row.client_whatsapp}`,
+              name: row.client_name,
+              whatsapp: row.client_whatsapp || "",
+              email: row.client_email || "",
+            });
+          }
+        });
+        setExistingClients(unique);
+      }
+    } finally {
+      setLoadingClients(false);
+    }
+  };
+
+  const filteredClients = existingClients.filter(client =>
+    client.name.toLowerCase().includes(clientSearch.toLowerCase()) ||
+    client.whatsapp.includes(clientSearch)
+  );
+
+  const handleSelectExistingClient = (client: ExistingClient) => {
+    setSelectedExistingClient(client);
+    setClientAccordionOpen(false);
   };
 
   const maskDate = (value: string): string => {
     const numbers = value.replace(/\D/g, '');
-    
-    if (numbers.length <= 2) {
-      return numbers;
-    } else if (numbers.length <= 4) {
-      return `${numbers.slice(0, 2)}/${numbers.slice(2)}`;
-    } else {
-      return `${numbers.slice(0, 2)}/${numbers.slice(2, 4)}/${numbers.slice(4, 8)}`;
-    }
+    if (numbers.length <= 2) return numbers;
+    if (numbers.length <= 4) return `${numbers.slice(0, 2)}/${numbers.slice(2)}`;
+    return `${numbers.slice(0, 2)}/${numbers.slice(2, 4)}/${numbers.slice(4, 8)}`;
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     const char = String.fromCharCode(e.which);
-    if (!/[0-9]/.test(char)) {
-      e.preventDefault();
-    }
+    if (!/[0-9]/.test(char)) e.preventDefault();
   };
 
   const convertDateToISO = (dateStr: string): string | null => {
     if (!dateStr || dateStr.length !== 10) return null;
-    
     const parts = dateStr.split('/');
     if (parts.length !== 3) return null;
-    
     const [day, month, year] = parts;
     if (day.length !== 2 || month.length !== 2 || year.length !== 4) return null;
-    
     const dayNum = parseInt(day);
     const monthNum = parseInt(month);
     const yearNum = parseInt(year);
-    
-    if (dayNum < 1 || dayNum > 31 || monthNum < 1 || monthNum > 12 || yearNum < 1900) {
-      return null;
-    }
-    
+    if (dayNum < 1 || dayNum > 31 || monthNum < 1 || monthNum > 12 || yearNum < 1900) return null;
     return `${year}-${month}-${day}`;
   };
 
   const toggleService = (service: Service) => {
     const exists = selectedServices.find(s => s.service_id === service.id);
-    
     if (exists) {
       setSelectedServices(selectedServices.filter(s => s.service_id !== service.id));
     } else {
@@ -152,8 +217,32 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
     return `${year}-${month}-${day}`;
   };
 
+  // Resolve the final client data for submission
+  const getClientData = () => {
+    if (clientType === "existing" && selectedExistingClient) {
+      return {
+        name: selectedExistingClient.name,
+        whatsapp: selectedExistingClient.whatsapp || "Sem WhatsApp",
+        email: selectedExistingClient.email || null,
+        birthday: null,
+      };
+    }
+    return {
+      name: clientName,
+      whatsapp: clientWhatsapp || "Sem WhatsApp",
+      email: clientEmail?.trim() || null,
+      birthday: clientBirthday,
+    };
+  };
+
+  const isFormValid = () => {
+    if (selectedServices.length === 0 || !startTime || !endTime) return false;
+    if (clientType === "existing") return !!selectedExistingClient;
+    return !!clientName;
+  };
+
   const handleSubmit = async () => {
-    if (selectedServices.length === 0 || !clientName || !startTime || !endTime) {
+    if (!isFormValid()) {
       toast({
         title: "Preencha todos os campos",
         description: "Selecione pelo menos um serviço e preencha os campos obrigatórios",
@@ -162,7 +251,9 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
       return;
     }
 
-    if (clientEmail && clientEmail.trim() && !clientEmail.includes('@')) {
+    const client = getClientData();
+
+    if (client.email && !client.email.includes('@')) {
       toast({
         title: "Email inválido",
         description: "Por favor, insira um email válido",
@@ -172,8 +263,8 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
     }
 
     let birthdayISO = null;
-    if (clientBirthday && clientBirthday.trim()) {
-      if (clientBirthday.length !== 10) {
+    if (client.birthday && client.birthday.trim()) {
+      if (client.birthday.length !== 10) {
         toast({
           title: "Data de nascimento inválida",
           description: "Use o formato DD/MM/AAAA",
@@ -181,8 +272,7 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
         });
         return;
       }
-      
-      birthdayISO = convertDateToISO(clientBirthday);
+      birthdayISO = convertDateToISO(client.birthday);
       if (!birthdayISO) {
         toast({
           title: "Data de nascimento inválida",
@@ -210,8 +300,8 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
       const appointmentData: any = {
         barber_id: barberId,
         service_id: selectedServices[0].service_id,
-        client_name: clientName,
-        client_whatsapp: clientWhatsapp || "Sem WhatsApp",
+        client_name: client.name,
+        client_whatsapp: client.whatsapp,
         appointment_date: today,
         appointment_time: startTime,
         end_time: endTime,
@@ -220,13 +310,8 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
         services_data: selectedServices,
       };
 
-      if (clientEmail && clientEmail.trim()) {
-        appointmentData.client_email = clientEmail.trim();
-      }
-
-      if (birthdayISO) {
-        appointmentData.client_birthday = birthdayISO;
-      }
+      if (client.email) appointmentData.client_email = client.email;
+      if (birthdayISO) appointmentData.client_birthday = birthdayISO;
 
       const { error } = await supabase
         .from("appointments")
@@ -236,13 +321,17 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
 
       toast({
         title: "✅ Cliente registrado!",
-        description: `${clientName} - ${startTime} às ${endTime}`,
+        description: `${client.name} - ${startTime} às ${endTime}`,
       });
 
       setOpen(false);
       onSuccess();
-      
+
+      // Reset all state
       setSelectedServices([]);
+      setClientType("walkin");
+      setSelectedExistingClient(null);
+      setClientSearch("");
       setClientName("");
       setClientEmail("");
       setClientWhatsapp("");
@@ -270,7 +359,7 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
           Entrada Direta
         </Button>
       </DialogTrigger>
-      
+
       <DialogContent className="max-w-3xl max-h-[90vh]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -289,9 +378,10 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
               </div>
             )}
 
+            {/* ── Services ── */}
             <div className="space-y-3">
               <Label className="text-base font-semibold">Serviços</Label>
-              
+
               <Card className="p-4 border-border bg-card/50">
                 <p className="text-sm text-muted-foreground mb-3">
                   Selecione os serviços realizados:
@@ -386,54 +476,227 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
               )}
             </div>
 
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="clientName">Nome do Cliente *</Label>
-                <Input
-                  id="clientName"
-                  value={clientName}
-                  onChange={(e) => setClientName(e.target.value)}
-                  placeholder="João Silva"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="clientWhatsapp">WhatsApp (opcional)</Label>
-                <Input
-                  id="clientWhatsapp"
-                  value={clientWhatsapp}
-                  onChange={(e) => setClientWhatsapp(e.target.value)}
-                  placeholder="(11) 98765-4321"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="clientEmail">E-mail (opcional)</Label>
-                <Input
-                  id="clientEmail"
-                  type="email"
-                  value={clientEmail}
-                  onChange={(e) => setClientEmail(e.target.value)}
-                  placeholder="cliente@email.com"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="clientBirthday">Data de Nascimento (opcional)</Label>
-                <Input
-                  id="clientBirthday"
-                  type="text"
-                  inputMode="numeric"
-                  value={clientBirthday}
-                  onChange={(e) => {
-                    const maskedValue = maskDate(e.target.value);
-                    setClientBirthday(maskedValue);
-                  }}
-                  onKeyPress={handleKeyPress}
-                  maxLength={10}
-                  placeholder="DD/MM/AAAA"
-                  className="bg-background"
-                />
-              </div>
+            {/* ── Client Type Selector ── */}
+            <div className="space-y-3">
+              <Label className="text-base font-semibold">Identificação do Cliente</Label>
+
+              <RadioGroup
+                value={clientType}
+                onValueChange={(v) => setClientType(v as "existing" | "walkin")}
+                className="grid grid-cols-2 gap-3"
+              >
+                {/* Existing client card */}
+                <Label
+                  htmlFor="type-existing"
+                  className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                    clientType === "existing"
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/40"
+                  }`}
+                >
+                  <RadioGroupItem value="existing" id="type-existing" className="sr-only" />
+                  <Users className={`h-6 w-6 ${clientType === "existing" ? "text-primary" : "text-muted-foreground"}`} />
+                  <span className={`text-sm font-semibold ${clientType === "existing" ? "text-primary" : "text-muted-foreground"}`}>
+                    Cliente Cadastrado
+                  </span>
+                  <span className="text-xs text-muted-foreground text-center leading-tight">
+                    Já possui histórico na barbearia
+                  </span>
+                </Label>
+
+                {/* Walk-in card */}
+                <Label
+                  htmlFor="type-walkin"
+                  className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                    clientType === "walkin"
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/40"
+                  }`}
+                >
+                  <RadioGroupItem value="walkin" id="type-walkin" className="sr-only" />
+                  <UserCheck className={`h-6 w-6 ${clientType === "walkin" ? "text-primary" : "text-muted-foreground"}`} />
+                  <span className={`text-sm font-semibold ${clientType === "walkin" ? "text-primary" : "text-muted-foreground"}`}>
+                    Cliente Avulso
+                  </span>
+                  <span className="text-xs text-muted-foreground text-center leading-tight">
+                    Primeira visita ou não cadastrado
+                  </span>
+                </Label>
+              </RadioGroup>
             </div>
 
+            {/* ── Existing Client Accordion ── */}
+            {clientType === "existing" && (
+              <div className="space-y-3">
+                <Collapsible open={clientAccordionOpen} onOpenChange={setClientAccordionOpen}>
+                  <CollapsibleTrigger asChild>
+                    <button
+                      type="button"
+                      className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all ${
+                        selectedExistingClient
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-primary/40 bg-card/50"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {selectedExistingClient ? (
+                          <>
+                            <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center">
+                              <span className="text-sm font-bold text-primary">
+                                {selectedExistingClient.name.charAt(0).toUpperCase()}
+                              </span>
+                            </div>
+                            <div className="text-left">
+                              <p className="font-semibold text-sm">{selectedExistingClient.name}</p>
+                              <p className="text-xs text-muted-foreground">{selectedExistingClient.whatsapp}</p>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <Search className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm text-muted-foreground">
+                              Selecionar cliente cadastrado...
+                            </span>
+                          </>
+                        )}
+                      </div>
+                      <ChevronDown
+                        className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${
+                          clientAccordionOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+                  </CollapsibleTrigger>
+
+                  <CollapsibleContent className="mt-2">
+                    <Card className="p-3 border-border bg-card/50">
+                      {/* Search field */}
+                      <div className="relative mb-3">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Buscar por nome ou WhatsApp..."
+                          value={clientSearch}
+                          onChange={(e) => setClientSearch(e.target.value)}
+                          className="pl-9"
+                        />
+                      </div>
+
+                      {/* Client list */}
+                      <div className="space-y-1 max-h-[220px] overflow-y-auto">
+                        {loadingClients ? (
+                          <p className="text-sm text-muted-foreground text-center py-6">
+                            Carregando clientes...
+                          </p>
+                        ) : filteredClients.length === 0 ? (
+                          <p className="text-sm text-muted-foreground text-center py-6">
+                            {clientSearch ? "Nenhum cliente encontrado" : "Nenhum cliente cadastrado ainda"}
+                          </p>
+                        ) : (
+                          filteredClients.map(client => {
+                            const isChosen = selectedExistingClient?.id === client.id;
+                            return (
+                              <button
+                                key={client.id}
+                                type="button"
+                                onClick={() => handleSelectExistingClient(client)}
+                                className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-all text-left ${
+                                  isChosen
+                                    ? "border-primary bg-primary/10"
+                                    : "border-transparent hover:border-border hover:bg-accent/50"
+                                }`}
+                              >
+                                <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                                  <span className="text-sm font-bold text-muted-foreground">
+                                    {client.name.charAt(0).toUpperCase()}
+                                  </span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-sm truncate">{client.name}</p>
+                                  <p className="text-xs text-muted-foreground truncate">{client.whatsapp}</p>
+                                </div>
+                                {isChosen && (
+                                  <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                                )}
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    </Card>
+                  </CollapsibleContent>
+                </Collapsible>
+
+                {/* Selected client summary pill */}
+                {selectedExistingClient && (
+                  <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/5 border border-primary/20">
+                    <UserCheck className="h-4 w-4 text-primary flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{selectedExistingClient.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{selectedExistingClient.whatsapp}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedExistingClient(null)}
+                      className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      Trocar
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Walk-in Form Fields ── */}
+            {clientType === "walkin" && (
+              <>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="clientName">Nome do Cliente *</Label>
+                    <Input
+                      id="clientName"
+                      value={clientName}
+                      onChange={(e) => setClientName(e.target.value)}
+                      placeholder="João Silva"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="clientWhatsapp">WhatsApp (opcional)</Label>
+                    <Input
+                      id="clientWhatsapp"
+                      value={clientWhatsapp}
+                      onChange={(e) => setClientWhatsapp(e.target.value)}
+                      placeholder="(11) 98765-4321"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="clientEmail">E-mail (opcional)</Label>
+                    <Input
+                      id="clientEmail"
+                      type="email"
+                      value={clientEmail}
+                      onChange={(e) => setClientEmail(e.target.value)}
+                      placeholder="cliente@email.com"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="clientBirthday">Data de Nascimento (opcional)</Label>
+                    <Input
+                      id="clientBirthday"
+                      type="text"
+                      inputMode="numeric"
+                      value={clientBirthday}
+                      onChange={(e) => setClientBirthday(maskDate(e.target.value))}
+                      onKeyPress={handleKeyPress}
+                      maxLength={10}
+                      placeholder="DD/MM/AAAA"
+                      className="bg-background"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── Time Fields ── */}
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="startTime">Horário de Início *</Label>
@@ -455,16 +718,17 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              {isStarter 
+              {isStarter
                 ? "Informe os horários do atendimento para registro financeiro"
                 : "Horários em que o cliente foi atendido"
               }
             </p>
 
+            {/* ── Actions ── */}
             <div className="flex gap-3 pt-4">
               <Button
                 onClick={handleSubmit}
-                disabled={loading || selectedServices.length === 0 || !clientName || !startTime || !endTime}
+                disabled={loading || !isFormValid()}
                 className="flex-1"
               >
                 {loading ? "Registrando..." : "Confirmar Entrada"}

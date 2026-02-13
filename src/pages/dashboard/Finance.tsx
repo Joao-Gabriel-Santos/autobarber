@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, TrendingUp, DollarSign, Clock, Award, Calendar, Users, Trophy, Zap } from "lucide-react";
+import { ArrowLeft, TrendingUp, DollarSign, Clock, Award, Calendar, Users, Trophy, Zap, Wallet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, subMonths, differenceInMinutes } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -60,7 +60,9 @@ const Finance = () => {
   // Métricas
   const [weeklyRevenue, setWeeklyRevenue] = useState(0);
   const [monthlyRevenue, setMonthlyRevenue] = useState(0);
+  const [totalRevenue, setTotalRevenue] = useState(0);           // ← NOVO: receita total histórica
   const [totalAppointments, setTotalAppointments] = useState(0);
+  const [allTimeAvgTicket, setAllTimeAvgTicket] = useState(0);   // ← NOVO: ticket médio geral
   const [topServices, setTopServices] = useState<ServiceStats[]>([]);
   const [peakHours, setPeakHours] = useState<HourStats[]>([]);
   const [weeklyData, setWeeklyData] = useState<any[]>([]);
@@ -102,7 +104,6 @@ const Finance = () => {
 
   const loadBarberPerformances = async (ownerId: string) => {
     try {
-      // Buscar todos os barbeiros da equipe
       const { data: teamMembers } = await supabase
         .from("profiles")
         .select("id, full_name")
@@ -117,7 +118,6 @@ const Finance = () => {
       const performances: BarberPerformance[] = [];
 
       for (const barber of teamMembers) {
-        // Buscar agendamentos do barbeiro no mês
         const { data: appointments } = await supabase
           .from("appointments")
           .select(`
@@ -142,13 +142,11 @@ const Finance = () => {
           ? (completed.length / totalAppointments) * 100 
           : 0;
 
-        // Calcular horas trabalhadas (estimativa baseada na duração dos serviços)
         const totalMinutes = completed.reduce((sum, a) => {
           return sum + (a.services?.duration || 30);
         }, 0);
         const totalHours = totalMinutes / 60;
 
-        // Score de eficiência (combina receita por hora e taxa de conclusão)
         const revenuePerHour = totalHours > 0 ? totalRevenue / totalHours : 0;
         const efficiencyScore = (revenuePerHour * 0.7) + (completionRate * 0.3);
 
@@ -164,7 +162,6 @@ const Finance = () => {
         });
       }
 
-      // Ordenar por receita total
       performances.sort((a, b) => b.total_revenue - a.total_revenue);
       setBarberPerformances(performances);
 
@@ -237,10 +234,17 @@ const Finance = () => {
       const monthRev = monthAppointments.reduce((sum, apt) => sum + apt.price, 0);
       const lastMonthRev = lastMonthAppointments.reduce((sum, apt) => sum + apt.price, 0);
 
+      // ─── Receita total histórica e ticket médio geral ───────────────────────
+      const allRev = (appointments || []).reduce((sum, apt) => sum + apt.price, 0);
+      const allCount = appointments?.length || 0;
+
       setWeeklyRevenue(weekRev);
       setMonthlyRevenue(monthRev);
       setLastMonthRevenue(lastMonthRev);
-      setTotalAppointments(appointments?.length || 0);
+      setTotalRevenue(allRev);
+      setTotalAppointments(allCount);
+      setAllTimeAvgTicket(allCount > 0 ? allRev / allCount : 0);
+      // ───────────────────────────────────────────────────────────────────────
 
       // Estatísticas de serviços
       const serviceMap = new Map<string, ServiceStats>();
@@ -365,7 +369,9 @@ const Finance = () => {
 
       <main className="container mx-auto px-4 py-8 max-w-7xl">
         {/* Métricas Principais */}
-        <div className="grid md:grid-cols-4 gap-6 mb-8">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+
+          {/* Receita Semanal */}
           <Card className="p-6 border-border bg-card hover:border-primary/50 transition-all">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-muted-foreground">
@@ -381,6 +387,7 @@ const Finance = () => {
             </p>
           </Card>
 
+          {/* Receita Mensal */}
           <Card className="p-6 border-border bg-card hover:border-primary/50 transition-all">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-muted-foreground">
@@ -396,31 +403,36 @@ const Finance = () => {
             </p>
           </Card>
 
+          {/* Receita Total Histórica — NOVO */}
           <Card className="p-6 border-border bg-card hover:border-primary/50 transition-all">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-muted-foreground">
-                {isBarber ? "Meus Atendimentos" : "Total Atendimentos"}
+                {isBarber ? "Meu Faturamento Total" : "Faturamento Total"}
               </span>
-              <TrendingUp className="h-4 w-4 text-primary" />
+              <Wallet className="h-4 w-4 text-primary" />
             </div>
-            <p className="text-3xl font-bold">{totalAppointments}</p>
+            <p className="text-3xl font-bold text-primary">
+              R$ {totalRevenue.toFixed(2)}
+            </p>
             <p className="text-xs text-muted-foreground mt-1">
-              Todos os concluídos
+              Desde o início • {totalAppointments} atendimentos
             </p>
           </Card>
 
+          {/* Ticket Médio — agora calculado sobre todos os atendimentos */}
           <Card className="p-6 border-border bg-card hover:border-primary/50 transition-all">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-muted-foreground">Ticket Médio</span>
               <Award className="h-4 w-4 text-primary" />
             </div>
             <p className="text-3xl font-bold">
-              R$ {totalAppointments > 0 ? ((weeklyRevenue + monthlyRevenue) / totalAppointments).toFixed(2) : "0.00"}
+              R$ {allTimeAvgTicket.toFixed(2)}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              Por atendimento
+              Média histórica por atendimento
             </p>
           </Card>
+
         </div>
 
         {/* Tabs com Gráficos */}
@@ -431,7 +443,7 @@ const Finance = () => {
             <TabsTrigger value="schedule">Horários</TabsTrigger>
             {isOwner && (
               <TabsTrigger value="team">
-                Desempenho da Equipe
+                Colaboradores
               </TabsTrigger>
             )}
           </TabsList>

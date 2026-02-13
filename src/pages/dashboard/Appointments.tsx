@@ -61,23 +61,20 @@ const Appointments = () => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [startTime, setStartTime] = useState<string>("");
-  const [newClient, setNewClient] = useState({name: "", whatsapp: "", birthdate: ""});
+  const [newClient, setNewClient] = useState({ name: "", whatsapp: "", birthdate: "" });
   const [endTime, setEndTime] = useState<string>("");
 
   useEffect(() => {
     checkUser();
     const now = new Date();
-      const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
     setStartTime(currentTime);
   }, []);
 
   const checkUser = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        navigate("/login");
-        return;
-      }
+      if (!user) { navigate("/login"); return; }
       setUser(user);
       loadAppointments(user.id);
     } catch (error) {
@@ -92,23 +89,15 @@ const Appointments = () => {
     setLoading(true);
     const { data, error } = await supabase
       .from("appointments")
-      .select(`
-        *,
-        services(name)
-      `)
+      .select(`*, services(name)`)
       .eq("barber_id", userId);
 
     if (error) {
-      toast({
-        title: "Erro ao carregar agendamentos",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao carregar agendamentos", description: error.message, variant: "destructive" });
       return;
     }
 
     const uniqueData = Array.from(new Map(data.map(item => [item.id, item])).values());
-  
     setAppointments(uniqueData);
     setLoading(false);
   };
@@ -117,56 +106,44 @@ const Appointments = () => {
     return new Date(dateString + 'T12:00:00');
   }
 
-  const maskDate = (value: string) => {
-  return value
-    .replace(/\D/g, "")
-    .replace(/(\d{2})(\d)/, "$1/$2")
-    .replace(/(\d{2})(\d)/, "$1/$2")
-    .replace(/(\d{4})(\d)/, "$1");
-};
+  const maskDate = (value: string) =>
+    value
+      .replace(/\D/g, "")
+      .replace(/(\d{2})(\d)/, "$1/$2")
+      .replace(/(\d{2})(\d)/, "$1/$2")
+      .replace(/(\d{4})(\d)/, "$1");
 
-const handleKeyPress = (e: React.KeyboardEvent) => {
-  if (!/[0-9]/.test(e.key)) {
-    e.preventDefault();
-  }
-};
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (!/[0-9]/.test(e.key)) e.preventDefault();
+  };
 
-const handleSaveClient = async () => {
-  setSaving(true);
-  try {
-    // Aqui você deve decidir se quer apenas salvar o cliente 
-    // ou abrir o componente de agendamento.
-    toast({
-      title: "Cliente cadastrado!",
-      description: "Agora você pode prosseguir com o agendamento.",
-    });
-    setEditDialogOpen(false);
-  } catch (error: any) {
-    toast({
-      title: "Erro",
-      description: error.message,
-      variant: "destructive",
-    });
-  } finally {
-    setSaving(false);
-  }
-};
+  const handleSaveClient = async () => {
+    setSaving(true);
+    try {
+      toast({ title: "Cliente cadastrado!", description: "Agora você pode prosseguir com o agendamento." });
+      setEditDialogOpen(false);
+    } catch (error: any) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
 
-  const handleWhatsAppClick = (whatsappNumber: string, clientName: string, appointment_date: string, appointment_time: string) => {
+  const handleWhatsAppClick = (
+    whatsappNumber: string,
+    clientName: string,
+    appointment_date: string,
+    appointment_time: string
+  ) => {
     const cleanNumber = whatsappNumber.replace(/\D/g, '');
     const barbershopName = barbershop?.barbershop_name || 'nossa barbearia';
-    
     const [year, month, day] = appointment_date.split('-');
     const dateFormatted = `${day}/${month}`;
     const timeFormatted = appointment_time.slice(0, 5);
-
-    const message = encodeURIComponent(`Olá, *${clientName}* tudo bem?
-Aqui é da barbearia ${barbershopName}.
-Passando só para confirmar seu agendamento para o dia ${dateFormatted} às ${timeFormatted}.
-Qualquer imprevisto é só avisar. Obrigado!`);
-    
-    const whatsappUrl = `https://wa.me/${cleanNumber}?text=${message}`;
-    window.open(whatsappUrl, '_blank');
+    const message = encodeURIComponent(
+      `Olá, *${clientName}* tudo bem?\nAqui é da barbearia ${barbershopName}.\nPassando só para confirmar seu agendamento para o dia ${dateFormatted} às ${timeFormatted}.\nQualquer imprevisto é só avisar. Obrigado!`
+    );
+    window.open(`https://wa.me/${cleanNumber}?text=${message}`, '_blank');
   };
 
   const [isUpdating, setIsUpdating] = useState(false);
@@ -174,39 +151,24 @@ Qualquer imprevisto é só avisar. Obrigado!`);
   const updateStatus = async (id: string, status: string) => {
     if (isUpdating) return;
     setIsUpdating(true);
-
     try {
       const updateData: any = { status };
-      
-      // Se está marcando como concluído e não tem end_time, captura o horário atual
       if (status === "completed") {
         const appointment = appointments.find(apt => apt.id === id);
         if (!appointment?.end_time) {
           const now = new Date();
-          const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:00`;
-          updateData.end_time = currentTime;
+          updateData.end_time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:00`;
         }
       }
-
-      const { error } = await supabase
-        .from("appointments")
-        .update(updateData)
-        .eq("id", id);
-
+      const { error } = await supabase.from("appointments").update(updateData).eq("id", id);
       if (error) throw error;
-
       toast({
         title: "Status atualizado!",
         description: status === "completed" ? "Horário de encerramento registrado automaticamente" : undefined,
       });
-
       if (user) loadAppointments(user.id);
     } catch (error: any) {
-      toast({
-        title: "Erro ao atualizar status",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao atualizar status", description: error.message, variant: "destructive" });
     } finally {
       setIsUpdating(false);
     }
@@ -217,54 +179,76 @@ Qualquer imprevisto é só avisar. Obrigado!`);
     setEditDialogOpen(true);
   };
 
-  const getFilteredAppointments = (status: string) => {
-    return appointments.filter(apt => apt.status === status);
+  const getFilteredAppointments = (status: string) =>
+    appointments.filter(apt => apt.status === status);
+
+  // ── Resolve o título e os detalhes de serviços do card ────────────────────
+  const resolveServiceDisplay = (appointment: Appointment) => {
+    const sd = appointment.services_data;
+    const hasServicesData = sd && Array.isArray(sd) && sd.length > 0;
+
+    // Múltiplos serviços: mais de 1 item OU 1 item com quantity > 1
+    const isMultiple = hasServicesData && (sd.length > 1 || sd[0].quantity > 1);
+
+    if (isMultiple) {
+      return {
+        title: `Múltiplos Serviços (${sd.reduce((sum, s) => sum + s.quantity, 0)})`,
+        showDetail: true,
+        items: sd,
+      };
+    }
+
+    // Serviço único via services_data
+    if (hasServicesData) {
+      return {
+        title: sd[0].service_name,
+        showDetail: false,
+        items: sd,
+      };
+    }
+
+    // Fallback: join com services (legado)
+    return {
+      title: appointment.services?.name || "Serviço",
+      showDetail: false,
+      items: [],
+    };
   };
+  // ─────────────────────────────────────────────────────────────────────────
 
   const renderAppointmentCard = (appointment: Appointment) => {
-    const hasMultipleServices = appointment.services_data && Array.isArray(appointment.services_data) && appointment.services_data.length > 0;
-    
+    const { title, showDetail, items } = resolveServiceDisplay(appointment);
+
     return (
       <Card key={appointment.id} className="p-6 border-border bg-card">
         <div className="flex items-start justify-between mb-4">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
-              {hasMultipleServices ? (
-                <h3 className="font-bold text-lg">
-                  Múltiplos Serviços ({appointment.services_data.length})
-                </h3>
-              ) : (
-                <h3 className="font-bold text-lg">
-                  {appointment.services?.name || "Serviço"}
-                </h3>
-              )}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => handleEdit(appointment)}
-              >
+              {/* ── Título: só mostra "Múltiplos Serviços" quando realmente for múltiplo ── */}
+              <h3 className="font-bold text-lg">{title}</h3>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(appointment)}>
                 <Edit className="h-4 w-4" />
               </Button>
             </div>
-            {hasMultipleServices && (
+
+            {/* Detalhes só aparecem quando showDetail = true */}
+            {showDetail && (
               <div className="space-y-1 mb-2">
-                {appointment.services_data.map((svc: any, idx: number) => (
+                {items.map((svc, idx) => (
                   <p key={idx} className="text-sm text-muted-foreground">
-                    {svc.quantity > 1 ? `${svc.quantity}x ` : ''}
-                    {svc.service_name} - R$ {(svc.price * svc.quantity).toFixed(2)}
+                    {svc.quantity > 1 ? `${svc.quantity}x ` : ""}
+                    {svc.service_name} — R$ {(svc.price * svc.quantity).toFixed(2)}
                   </p>
                 ))}
               </div>
             )}
+
             <Badge className={STATUS_COLORS[appointment.status]}>
               {STATUS_LABELS[appointment.status]}
             </Badge>
           </div>
           <div className="text-right">
-            <p className="text-2xl font-bold text-primary">
-              R$ {appointment.price.toFixed(2)}
-            </p>
+            <p className="text-2xl font-bold text-primary">R$ {appointment.price.toFixed(2)}</p>
           </div>
         </div>
 
@@ -277,9 +261,9 @@ Qualquer imprevisto é só avisar. Obrigado!`);
             <Phone className="h-4 w-4 text-muted-foreground" />
             <button
               onClick={() => handleWhatsAppClick(
-                appointment.client_whatsapp, 
-                appointment.client_name, 
-                appointment.appointment_date, 
+                appointment.client_whatsapp,
+                appointment.client_name,
+                appointment.appointment_date,
                 appointment.appointment_time
               )}
               className="text-[#25D366] hover:text-[#20BA5A] hover:underline font-medium transition-colors flex items-center gap-1 group"
@@ -291,9 +275,7 @@ Qualquer imprevisto é só avisar. Obrigado!`);
           <div className="flex items-center gap-2 text-muted-foreground">
             <Calendar className="h-4 w-4" />
             <span>
-              {format(parseDateAsLocal(appointment.appointment_date), "dd 'de' MMMM 'de' yyyy", {
-                locale: ptBR,
-              })}
+              {format(parseDateAsLocal(appointment.appointment_date), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
             </span>
           </div>
           <div className="flex items-center gap-2 text-muted-foreground">
@@ -307,18 +289,10 @@ Qualquer imprevisto é só avisar. Obrigado!`);
 
         {appointment.status === "confirmed" && (
           <div className="flex gap-2">
-            <Button
-              size="sm"
-              onClick={() => updateStatus(appointment.id, "completed")}
-              className="flex-1"
-            >
+            <Button size="sm" onClick={() => updateStatus(appointment.id, "completed")} className="flex-1">
               Marcar como Concluído
             </Button>
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={() => updateStatus(appointment.id, "cancelled")}
-            >
+            <Button size="sm" variant="destructive" onClick={() => updateStatus(appointment.id, "cancelled")}>
               Cancelar
             </Button>
           </div>
@@ -385,10 +359,7 @@ Qualquer imprevisto é só avisar. Obrigado!`);
                         type="text"
                         inputMode="numeric"
                         value={newClient.birthdate}
-                        onChange={(e) => {
-                          const maskedValue = maskDate(e.target.value);
-                          setNewClient({ ...newClient, birthdate: maskedValue });
-                        }}
+                        onChange={(e) => setNewClient({ ...newClient, birthdate: maskDate(e.target.value) })}
                         onKeyPress={handleKeyPress}
                         maxLength={10}
                         placeholder="DD/MM/AAAA"
@@ -413,8 +384,8 @@ Qualquer imprevisto é só avisar. Obrigado!`);
                         onChange={(e) => setEndTime(e.target.value)}
                       />
                     </div>
-                    </div>
-                    <div className="flex gap-3 pt-4">
+                  </div>
+                  <div className="flex gap-3 pt-4">
                     <Button
                       onClick={handleSaveClient}
                       disabled={saving || !newClient.name || !newClient.birthdate}
@@ -422,10 +393,7 @@ Qualquer imprevisto é só avisar. Obrigado!`);
                     >
                       {saving ? "Salvando..." : "Cadastrar Cliente"}
                     </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => setEditDialogOpen(false)}
-                    >
+                    <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
                       Cancelar
                     </Button>
                   </div>
@@ -468,9 +436,7 @@ Qualquer imprevisto é só avisar. Obrigado!`);
           <TabsContent value="confirmed" className="space-y-4">
             {getFilteredAppointments("confirmed").length === 0 ? (
               <Card className="p-12 text-center border-border bg-card">
-                <p className="text-muted-foreground">
-                  Nenhum agendamento confirmado.
-                </p>
+                <p className="text-muted-foreground">Nenhum agendamento confirmado.</p>
               </Card>
             ) : (
               getFilteredAppointments("confirmed").map(renderAppointmentCard)
@@ -480,9 +446,7 @@ Qualquer imprevisto é só avisar. Obrigado!`);
           <TabsContent value="completed" className="space-y-4">
             {getFilteredAppointments("completed").length === 0 ? (
               <Card className="p-12 text-center border-border bg-card">
-                <p className="text-muted-foreground">
-                  Nenhum agendamento concluído.
-                </p>
+                <p className="text-muted-foreground">Nenhum agendamento concluído.</p>
               </Card>
             ) : (
               getFilteredAppointments("completed").map(renderAppointmentCard)
@@ -492,9 +456,7 @@ Qualquer imprevisto é só avisar. Obrigado!`);
           <TabsContent value="cancelled" className="space-y-4">
             {getFilteredAppointments("cancelled").length === 0 ? (
               <Card className="p-12 text-center border-border bg-card">
-                <p className="text-muted-foreground">
-                  Nenhum agendamento cancelado.
-                </p>
+                <p className="text-muted-foreground">Nenhum agendamento cancelado.</p>
               </Card>
             ) : (
               getFilteredAppointments("cancelled").map(renderAppointmentCard)
@@ -508,9 +470,7 @@ Qualquer imprevisto é só avisar. Obrigado!`);
           appointment={editingAppointment}
           open={editDialogOpen}
           onOpenChange={setEditDialogOpen}
-          onSuccess={() => {
-            if (user) loadAppointments(user.id);
-          }}
+          onSuccess={() => { if (user) loadAppointments(user.id); }}
         />
       )}
     </div>
