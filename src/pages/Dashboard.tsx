@@ -50,7 +50,6 @@ const Dashboard = () => {
     if (isBarber) {
       // Barbeiro vê apenas seus próprios agendamentos
       query = query.eq("barber_id", userId);
-      console.log("🔍 Barbeiro: Buscando apenas agendamentos de", userId);
     } else if (isOwner && permissions?.ownerId) {
       // Owner vê todos os agendamentos da equipe
       const { data: teamMembers } = await supabase
@@ -59,7 +58,6 @@ const Dashboard = () => {
         .or(`id.eq.${userId},barbershop_id.eq.${userId}`);
       
       const barberIds = teamMembers?.map(m => m.id) || [userId];
-      console.log("🔍 Owner: Barber IDs buscando:", barberIds);
       query = query.in("barber_id", barberIds);
     }
 

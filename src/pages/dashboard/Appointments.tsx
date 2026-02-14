@@ -22,7 +22,6 @@ interface Appointment {
   end_time?: string;
   client_name: string;
   client_whatsapp: string;
-  client_email?: string;
   status: string;
   price: number;
   services: {
@@ -91,7 +90,6 @@ const Appointments = () => {
       if (isBarber) {
         // Barbeiro vê apenas seus próprios agendamentos
         query = query.eq("barber_id", userId);
-        console.log("🔍 Barbeiro: Buscando apenas agendamentos de", userId);
       } else if (isOwner && permissions?.ownerId) {
         // Owner vê todos os agendamentos da equipe
         const { data: teamMembers } = await supabase
@@ -100,7 +98,6 @@ const Appointments = () => {
           .or(`id.eq.${userId},barbershop_id.eq.${userId}`);
         
         const barberIds = teamMembers?.map(m => m.id) || [userId];
-        console.log("🔍 Owner: Barber IDs buscando:", barberIds);
         query = query.in("barber_id", barberIds);
       }
   
@@ -167,7 +164,7 @@ const Appointments = () => {
     }
 
     const uniqueData = Array.from(new Map(data.map(item => [item.id, item])).values());
-    setAppointments(uniqueData);
+    setAppointments(uniqueData as unknown as Appointment[]);
     setLoading(false);
   };
 

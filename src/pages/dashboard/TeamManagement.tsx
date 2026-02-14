@@ -160,14 +160,19 @@ const TeamManagement = () => {
     }
   };
 
+  /**
+   * CORREÇÃO: A query de comissão estava usando `.from("clients")` com campo `barber_id`
+   * inexistente naquela tabela. Corrigido para `.from("barber_commissions")` com
+   * os campos corretos da interface BarberCommission.
+   */
   const loadBarberStats = async (ownerId: string) => {
     try {
-      const { data: teamMembers } = await supabase
+      const { data: members } = await supabase
         .from("profiles")
         .select("id, full_name")
         .or(`id.eq.${ownerId},barbershop_id.eq.${ownerId}`);
 
-      if (!teamMembers) return;
+      if (!members) return;
 
       const now = new Date();
       const monthStart = startOfMonth(now);
@@ -175,7 +180,8 @@ const TeamManagement = () => {
 
       const stats: BarberStats[] = [];
 
-      for (const barber of teamMembers) {
+      for (const barber of members) {
+        // Buscar agendamentos concluídos do mês
         const { data: appointments } = await supabase
           .from("appointments")
           .select("id, price, status")
@@ -185,28 +191,30 @@ const TeamManagement = () => {
           .lte("appointment_date", format(monthEnd, "yyyy-MM-dd"));
 
         const totalAppointments = appointments?.length || 0;
-        const totalRevenue = appointments?.reduce((sum, a) => sum + a.price, 0) || 0;
+        const totalRevenue = appointments?.reduce((sum, a) => sum + (a.price || 0), 0) || 0;
         const avgTicket = totalAppointments > 0 ? totalRevenue / totalAppointments : 0;
 
-        // Buscar configuração de comissão
+        // CORREÇÃO: buscar configuração de comissão da tabela correta
         const { data: commissionConfig } = await supabase
-          .from("clients")
-          .select("*")
+          .from("barber_commissions")
+          .select("commission_rate, fixed_salary, payment_type")
           .eq("barber_id", barber.id)
           .maybeSingle();
 
         let commissionEarned = 0;
         if (commissionConfig) {
           if (commissionConfig.payment_type === 'commission') {
-            commissionEarned = totalRevenue * (commissionConfig.commission_rate / 100);
+            commissionEarned = totalRevenue * ((commissionConfig.commission_rate ?? 0) / 100);
           } else if (commissionConfig.payment_type === 'fixed') {
-            commissionEarned = commissionConfig.fixed_salary;
+            commissionEarned = commissionConfig.fixed_salary ?? 0;
           } else if (commissionConfig.payment_type === 'mixed') {
-            commissionEarned = commissionConfig.fixed_salary + (totalRevenue * (commissionConfig.commission_rate / 100));
+            commissionEarned =
+              (commissionConfig.fixed_salary ?? 0) +
+              totalRevenue * ((commissionConfig.commission_rate ?? 0) / 100);
           }
         }
 
-        const performanceScore = (totalAppointments * 10) + (avgTicket / 10);
+        const performanceScore = totalAppointments * 10 + avgTicket / 10;
 
         stats.push({
           id: barber.id,
@@ -221,9 +229,13 @@ const TeamManagement = () => {
 
       stats.sort((a, b) => b.total_revenue - a.total_revenue);
       setBarberStats(stats);
-
     } catch (error: any) {
       console.error("Erro ao carregar estatísticas:", error);
+      toast({
+        title: "Erro ao carregar desempenho",
+        description: error.message,
+        variant: "destructive",
+      });
     }
   };
 
@@ -285,7 +297,6 @@ const TeamManagement = () => {
   const handleOpenCommissionDialog = async (barberId: string) => {
     setSelectedBarber(barberId);
     
-    // Carregar configuração existente
     const { data: existing } = await supabase
       .from("barber_commissions")
       .select("*")
@@ -294,9 +305,9 @@ const TeamManagement = () => {
 
     if (existing) {
       setCommissionData({
-        commission_rate: existing.commission_rate,
-        fixed_salary: existing.fixed_salary,
-        payment_type: existing.payment_type,
+        commission_rate: existing.commission_rate ?? 50,
+        fixed_salary: existing.fixed_salary ?? 0,
+        payment_type: existing.payment_type as 'commission' | 'fixed' | 'mixed',
         notes: existing.notes || ''
       });
     } else {
@@ -369,9 +380,7 @@ const TeamManagement = () => {
 
       if (error) throw error;
 
-      toast({
-        title: "Convite removido",
-      });
+      toast({ title: "Convite removido" });
 
       if (user) await loadInvites(user.id);
     } catch (error: any) {
@@ -384,24 +393,17 @@ const TeamManagement = () => {
   };
 
   const removeMember = async (memberId: string) => {
-    if (!confirm("Tem certeza que deseja remover este barbeiro da equipe?")) {
-      return;
-    }
+    if (!confirm("Tem certeza que deseja remover este barbeiro da equipe?")) return;
 
     try {
       const { error } = await supabase
         .from("profiles")
-        .update({
-          role: 'owner',
-          barbershop_id: null
-        })
+        .update({ role: 'owner', barbershop_id: null })
         .eq("id", memberId);
 
       if (error) throw error;
 
-      toast({
-        title: "Barbeiro removido da equipe",
-      });
+      toast({ title: "Barbeiro removido da equipe" });
 
       if (user) {
         await loadTeamMembers(user.id);
@@ -760,16 +762,10 @@ const TeamManagement = () => {
               </div>
 
               <div className="flex gap-3 pt-4">
-                <Button
-                  onClick={handleSaveCommission}
-                  className="flex-1"
-                >
+                <Button onClick={handleSaveCommission} className="flex-1">
                   Salvar Configuração
                 </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setCommissionDialogOpen(false)}
-                >
+                <Button variant="outline" onClick={() => setCommissionDialogOpen(false)}>
                   Cancelar
                 </Button>
               </div>

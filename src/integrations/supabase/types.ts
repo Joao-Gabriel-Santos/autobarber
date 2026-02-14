@@ -9,6 +9,47 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      barber_commissions: {
+        Row: {
+          id: string
+          barber_id: string
+          payment_type: 'commission' | 'fixed' | 'mixed'
+          commission_rate: number
+          fixed_salary: number
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          barber_id: string
+          payment_type?: 'commission' | 'fixed' | 'mixed'
+          commission_rate?: number
+          fixed_salary?: number
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          barber_id?: string
+          payment_type?: 'commission' | 'fixed' | 'mixed'
+          commission_rate?: number
+          fixed_salary?: number
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "barber_commissions_barber_id_fkey"
+            columns: ["barber_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       clients: {
         Row: {
           id: string

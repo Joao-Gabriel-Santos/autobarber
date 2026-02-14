@@ -14,6 +14,7 @@ import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { parsePhoneNumberFromString, CountryCode } from 'libphonenumber-js';
 
 const ClientsManagement = () => {
   const navigate = useNavigate();
@@ -42,48 +43,50 @@ const ClientsManagement = () => {
     notes: ""
   });
 
-  // Função para aplicar máscara de data (DD/MM/YYYY)
+  // ─── Helpers (espelho do ClientAuth.tsx) ───────────────────────────────────
+
   const maskDate = (value: string): string => {
-    const numbers = value.replace(/\D/g, '');
-    
-    if (numbers.length <= 2) {
-      return numbers;
-    } else if (numbers.length <= 4) {
-      return `${numbers.slice(0, 2)}/${numbers.slice(2)}`;
-    } else {
-      return `${numbers.slice(0, 2)}/${numbers.slice(2, 4)}/${numbers.slice(4, 8)}`;
-    }
+    return value
+      .replace(/\D/g, "")
+      .replace(/(\d{2})(\d)/, "$1/$2")
+      .replace(/(\d{2})(\d)/, "$1/$2")
+      .replace(/(\d{4})(\d+?)$/, "$1");
   };
 
-  // Função para validar apenas números
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    const char = String.fromCharCode(e.which);
-    if (!/[0-9]/.test(char)) {
-      e.preventDefault();
-    }
-  };
+  const convertDateToISO = (dateString: string): string | null => {
+    if (!dateString || dateString.length !== 10) return null;
 
-  // Função para converter DD/MM/YYYY para YYYY-MM-DD
-  const convertDateToISO = (dateStr: string): string | null => {
-    if (!dateStr || dateStr.length !== 10) return null;
-    
-    const parts = dateStr.split('/');
-    if (parts.length !== 3) return null;
-    
-    const [day, month, year] = parts;
-    if (day.length !== 2 || month.length !== 2 || year.length !== 4) return null;
-    
-    // Validar valores
+    const [day, month, year] = dateString.split("/");
+
     const dayNum = parseInt(day);
     const monthNum = parseInt(month);
     const yearNum = parseInt(year);
-    
-    if (dayNum < 1 || dayNum > 31 || monthNum < 1 || monthNum > 12 || yearNum < 1900) {
-      return null;
-    }
-    
+
+    if (dayNum < 1 || dayNum > 31) return null;
+    if (monthNum < 1 || monthNum > 12) return null;
+    if (yearNum < 1900 || yearNum > new Date().getFullYear()) return null;
+
     return `${year}-${month}-${day}`;
   };
+
+  const validateAndNormalize = (phone: string) => {
+    const defaultCountry = "BR" as CountryCode;
+    const phoneNumber = parsePhoneNumberFromString(phone, defaultCountry);
+    if (!phoneNumber) return { valid: false, reason: "invalid_format" };
+
+    const isPossible = phoneNumber.isPossible();
+    const isValid = phoneNumber.isValid();
+    const e164 = phoneNumber.number;
+
+    return {
+      valid: isPossible && isValid,
+      e164,
+      country: phoneNumber.country,
+      nationalNumber: phoneNumber.nationalNumber,
+    };
+  };
+
+  // ─── Efeitos e carregamento ────────────────────────────────────────────────
 
   useEffect(() => {
     checkUser();
@@ -105,14 +108,13 @@ const ClientsManagement = () => {
         return;
       }
 
-      // Verificar se é owner
       const { data: profile } = await supabase
         .from("profiles")
         .select("role")
         .eq("id", user.id)
         .single();
 
-      if (profile?.role !== 'owner') {
+      if (profile?.role !== "owner") {
         toast({
           title: "Acesso negado",
           description: "Apenas donos podem acessar esta página",
@@ -133,17 +135,17 @@ const ClientsManagement = () => {
 
   const loadClients = async () => {
     if (!user) return;
-    
     const data = await ClientService.listClients(user.id, filters);
     setClients(data);
   };
 
   const loadStats = async () => {
     if (!user) return;
-    
     const data = await ClientService.getClientStats(user.id);
     setStats(data);
   };
+
+  // ─── Cadastro manual (mesmo fluxo do ClientAuth.tsx) ──────────────────────
 
   const handleSaveClient = async () => {
     if (!newClient.name || !newClient.whatsapp) {
@@ -155,8 +157,19 @@ const ClientsManagement = () => {
       return;
     }
 
+    // Validar WhatsApp
+    const phoneCheck = validateAndNormalize(newClient.whatsapp);
+    if (!phoneCheck.valid) {
+      toast({
+        title: "WhatsApp inválido",
+        description: "Digite um número válido. Ex: (11) 98765-4321",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Validar email se fornecido
-    if (newClient.email && !newClient.email.includes('@')) {
+    if (newClient.email && !newClient.email.includes("@")) {
       toast({
         title: "Email inválido",
         description: "Por favor, insira um email válido",
@@ -166,53 +179,49 @@ const ClientsManagement = () => {
     }
 
     // Validar e converter data de nascimento se fornecida
-    let birthdateISO = null;
+    let birthdateISO: string | null = null;
     if (newClient.birthdate) {
-      if (newClient.birthdate.length !== 10) {
-        toast({
-          title: "Data de nascimento inválida",
-          description: "Use o formato DD/MM/YYYY",
-          variant: "destructive",
-        });
-        return;
-      }
-      
       birthdateISO = convertDateToISO(newClient.birthdate);
       if (!birthdateISO) {
         toast({
           title: "Data de nascimento inválida",
-          description: "Verifique a data informada",
+          description: "Digite uma data válida no formato DD/MM/AAAA",
           variant: "destructive",
         });
         return;
       }
     }
 
+    // Verificar duplicidade
+    const { data: existing } = await supabase
+      .from("clients")
+      .select("id")
+      .eq("barbershop_id", user.id)
+      .eq("whatsapp", phoneCheck.e164)
+      .maybeSingle();
+
+    if (existing) {
+      toast({
+        title: "Cliente já cadastrado",
+        description: "Já existe um cliente com esse WhatsApp na sua barbearia",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setSaving(true);
     try {
       const clientData: any = {
-        barbershop_id: user.id, // CORRIGIDO: era barber_id, agora é barbershop_id
-        nome: newClient.name, // CORRIGIDO: era name, agora é nome
-        whatsapp: newClient.whatsapp,
+        barbershop_id: user.id,
+        nome: newClient.name,
+        whatsapp: phoneCheck.e164,
       };
 
-      // Adicionar campos opcionais apenas se preenchidos
-      if (birthdateISO) {
-        clientData.data_nascimento = birthdateISO; // CORRIGIDO: era birthdate, agora é data_nascimento
-      }
+      if (birthdateISO) clientData.data_nascimento = birthdateISO;
+      if (newClient.email?.trim()) clientData.email = newClient.email.trim();
+      if (newClient.notes?.trim()) clientData.notes = newClient.notes.trim();
 
-      if (newClient.email && newClient.email.trim()) {
-        clientData.email = newClient.email.trim();
-      }
-
-      if (newClient.notes && newClient.notes.trim()) {
-        clientData.notes = newClient.notes.trim();
-      }
-
-      const { error } = await supabase
-        .from("clients")
-        .insert(clientData);
-
+      const { error } = await supabase.from("clients").insert(clientData);
       if (error) throw error;
 
       toast({
@@ -221,14 +230,7 @@ const ClientsManagement = () => {
       });
 
       setDialogOpen(false);
-      setNewClient({
-        name: "",
-        whatsapp: "",
-        birthdate: "",
-        email: "",
-        notes: ""
-      });
-
+      setNewClient({ name: "", whatsapp: "", birthdate: "", email: "", notes: "" });
       loadClients();
       loadStats();
     } catch (error: any) {
@@ -242,6 +244,15 @@ const ClientsManagement = () => {
     }
   };
 
+  const handleDialogClose = (open: boolean) => {
+    setDialogOpen(open);
+    if (!open) {
+      setNewClient({ name: "", whatsapp: "", birthdate: "", email: "", notes: "" });
+    }
+  };
+
+  // ─── Utilitários de UI ────────────────────────────────────────────────────
+
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return "—";
     try {
@@ -254,10 +265,9 @@ const ClientsManagement = () => {
   };
 
   const handleWhatsAppClick = (whatsapp: string, clientName: string) => {
-    const cleanNumber = whatsapp.replace(/\D/g, '');
+    const cleanNumber = whatsapp.replace(/\D/g, "");
     const message = encodeURIComponent(`Olá ${clientName}, tudo bem? Aqui é da barbearia!`);
-    const whatsappUrl = `https://wa.me/${cleanNumber}?text=${message}`;
-    window.open(whatsappUrl, '_blank');
+    window.open(`https://wa.me/${cleanNumber}?text=${message}`, "_blank");
   };
 
   if (loading) {
@@ -288,6 +298,104 @@ const ClientsManagement = () => {
                 </p>
               </div>
             </div>
+
+            {/* Botão de cadastro manual */}
+            <Dialog open={dialogOpen} onOpenChange={handleDialogClose}>
+              <DialogTrigger asChild>
+                <Button className="shadow-gold" size="sm">
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Novo Cliente
+                </Button>
+              </DialogTrigger>
+
+              <DialogContent className="sm:max-w-md border-border bg-card">
+                <DialogHeader>
+                  <div className="flex flex-col items-center text-center mb-2">
+                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+                      <UserPlus className="h-6 w-6 text-primary" />
+                    </div>
+                    <DialogTitle className="text-2xl font-bold">Novo Cliente</DialogTitle>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Preencha os dados para cadastrar manualmente
+                    </p>
+                  </div>
+                </DialogHeader>
+
+                <div className="space-y-4 mt-2">
+                  {/* Nome */}
+                  <div>
+                    <Label htmlFor="client-name">
+                      Nome e Sobrenome <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="client-name"
+                      value={newClient.name}
+                      onChange={(e) => setNewClient({ ...newClient, name: e.target.value })}
+                      onKeyDown={(e) => e.key === "Enter" && handleSaveClient()}
+                      placeholder="Digite o nome completo"
+                      className="bg-background mt-1"
+                      autoFocus
+                    />
+                  </div>
+
+                  {/* WhatsApp */}
+                  <div>
+                    <Label htmlFor="client-whatsapp">
+                      WhatsApp <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="client-whatsapp"
+                      value={newClient.whatsapp}
+                      onChange={(e) => setNewClient({ ...newClient, whatsapp: e.target.value })}
+                      onKeyDown={(e) => e.key === "Enter" && handleSaveClient()}
+                      placeholder="(00) 00000-0000"
+                      className="bg-background mt-1"
+                    />
+                  </div>
+
+                  {/* Data de Nascimento */}
+                  <div>
+                    <Label htmlFor="client-birthday">Data de Nascimento</Label>
+                    <Input
+                      id="client-birthday"
+                      type="text"
+                      inputMode="numeric"
+                      value={newClient.birthdate}
+                      onChange={(e) => {
+                        const masked = maskDate(e.target.value);
+                        setNewClient({ ...newClient, birthdate: masked });
+                      }}
+                      onKeyDown={(e) => e.key === "Enter" && handleSaveClient()}
+                      maxLength={10}
+                      placeholder="DD/MM/AAAA"
+                      className="bg-background mt-1"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      💡 Informe para enviar mensagem no aniversário!
+                    </p>
+                  </div>
+
+                  {/* Ações */}
+                  <div className="flex gap-3 pt-2">
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => handleDialogClose(false)}
+                      disabled={saving}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      onClick={handleSaveClient}
+                      disabled={saving}
+                      className="flex-1 shadow-gold"
+                    >
+                      {saving ? "Cadastrando..." : "Cadastrar Cliente"}
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
       </header>
@@ -301,9 +409,7 @@ const ClientsManagement = () => {
                 <span className="text-sm text-muted-foreground">Total de Clientes</span>
                 <Users className="h-4 w-4 text-primary" />
               </div>
-              <p className="text-3xl font-bold text-primary">
-                {stats.total_clientes}
-              </p>
+              <p className="text-3xl font-bold text-primary">{stats.total_clientes}</p>
             </Card>
 
             <Card className="p-6 border-border bg-card hover:border-primary/50 transition-all">
@@ -311,12 +417,8 @@ const ClientsManagement = () => {
                 <span className="text-sm text-muted-foreground">Clientes Ativos</span>
                 <TrendingUp className="h-4 w-4 text-green-500" />
               </div>
-              <p className="text-3xl font-bold text-green-500">
-                {stats.clientes_ativos}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Último corte há menos de 30 dias
-              </p>
+              <p className="text-3xl font-bold text-green-500">{stats.clientes_ativos}</p>
+              <p className="text-xs text-muted-foreground mt-1">Último corte há menos de 30 dias</p>
             </Card>
 
             <Card className="p-6 border-border bg-card hover:border-primary/50 transition-all">
@@ -324,12 +426,8 @@ const ClientsManagement = () => {
                 <span className="text-sm text-muted-foreground">Clientes Inativos</span>
                 <Calendar className="h-4 w-4 text-yellow-500" />
               </div>
-              <p className="text-3xl font-bold text-yellow-500">
-                {stats.clientes_inativos}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Mais de 30 dias sem corte
-              </p>
+              <p className="text-3xl font-bold text-yellow-500">{stats.clientes_inativos}</p>
+              <p className="text-xs text-muted-foreground mt-1">Mais de 30 dias sem corte</p>
             </Card>
 
             <Card className="p-6 border-border bg-card hover:border-primary/50 transition-all">
@@ -337,12 +435,8 @@ const ClientsManagement = () => {
                 <span className="text-sm text-muted-foreground">Aniversariantes</span>
                 <Gift className="h-4 w-4 text-primary" />
               </div>
-              <p className="text-3xl font-bold text-primary">
-                {stats.aniversariantes_mes}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Neste mês
-              </p>
+              <p className="text-3xl font-bold text-primary">{stats.aniversariantes_mes}</p>
+              <p className="text-xs text-muted-foreground mt-1">Neste mês</p>
             </Card>
           </div>
         )}
@@ -402,9 +496,17 @@ const ClientsManagement = () => {
         <div className="space-y-4">
           {clients.length === 0 ? (
             <Card className="p-12 text-center border-border bg-card">
-              <p className="text-muted-foreground">
+              <UserPlus className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
+              <p className="text-muted-foreground mb-4">
                 Nenhum cliente encontrado com os filtros aplicados.
               </p>
+              <Button
+                variant="outline"
+                onClick={() => setDialogOpen(true)}
+              >
+                <UserPlus className="h-4 w-4 mr-2" />
+                Cadastrar primeiro cliente
+              </Button>
             </Card>
           ) : (
             clients.map((client) => (
@@ -440,9 +542,7 @@ const ClientsManagement = () => {
                         <p className="text-xs text-muted-foreground">Último Corte</p>
                         <p className="font-semibold">{formatDate(client.data_ultimo_corte)}</p>
                         {client.dias_sem_corte !== undefined && (
-                          <p className="text-xs text-muted-foreground">
-                            {client.dias_sem_corte} dias atrás
-                          </p>
+                          <p className="text-xs text-muted-foreground">{client.dias_sem_corte} dias atrás</p>
                         )}
                       </div>
 
@@ -459,10 +559,9 @@ const ClientsManagement = () => {
                       <div>
                         <p className="text-xs text-muted-foreground">Próximo Benefício</p>
                         <p className="font-semibold">
-                          {client.proximo_beneficio !== undefined 
+                          {client.proximo_beneficio !== undefined
                             ? `Faltam ${client.proximo_beneficio} cortes`
-                            : "—"
-                          }
+                            : "—"}
                         </p>
                       </div>
                     </div>

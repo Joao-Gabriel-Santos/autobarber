@@ -32,7 +32,6 @@ interface ExistingClient {
   id: string;
   name: string;
   whatsapp: string;
-  email?: string;
 }
 
 interface WalkInProps {
@@ -59,7 +58,6 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
 
   // Form fields
   const [clientName, setClientName] = useState("");
-  const [clientEmail, setClientEmail] = useState("");
   const [clientWhatsapp, setClientWhatsapp] = useState("");
   const [clientBirthday, setClientBirthday] = useState("");
   const [startTime, setStartTime] = useState<string>("");
@@ -87,7 +85,6 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
     setSelectedExistingClient(null);
     setClientSearch("");
     setClientName("");
-    setClientEmail("");
     setClientWhatsapp("");
     setClientBirthday("");
   }, [clientType]);
@@ -102,36 +99,35 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
     setServices(data || []);
   };
 
+  /**
+   * CORREÇÃO: Busca clientes diretamente da tabela `clients` usando `barbershop_id`.
+   * Antes buscava de `appointments`, o que perdia clientes que ainda não tinham
+   * nenhum agendamento registrado.
+   */
   const loadExistingClients = async () => {
     setLoadingClients(true);
     try {
-      // Fetch distinct clients from past appointments for this barber
-      const { data } = await supabase
-        .from("appointments")
-        .select("client_name, client_whatsapp, client_email")
-        .eq("barber_id", barberId)
-        .not("client_name", "is", null)
-        .not("client_whatsapp", "eq", "Sem WhatsApp")
-        .order("client_name", { ascending: true });
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, nome, whatsapp")
+        .eq("barbershop_id", barberId)
+        .order("nome", { ascending: true });
 
-      if (data) {
-        // Deduplicate by whatsapp
-        const seen = new Set<string>();
-        const unique: ExistingClient[] = [];
-        data.forEach((row, idx) => {
-          const key = row.client_whatsapp || row.client_name;
-          if (!seen.has(key)) {
-            seen.add(key);
-            unique.push({
-              id: `${idx}-${row.client_whatsapp}`,
-              name: row.client_name,
-              whatsapp: row.client_whatsapp || "",
-              email: row.client_email || "",
-            });
-          }
-        });
-        setExistingClients(unique);
-      }
+      if (error) throw error;
+
+      const clients: ExistingClient[] = (data || []).map((row) => ({
+        id: row.id,
+        name: row.nome,
+        whatsapp: row.whatsapp || ""
+      }));
+
+      setExistingClients(clients);
+    } catch (error: any) {
+      toast({
+        title: "Erro ao carregar clientes",
+        description: error.message,
+        variant: "destructive",
+      });
     } finally {
       setLoadingClients(false);
     }
@@ -223,15 +219,13 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
       return {
         name: selectedExistingClient.name,
         whatsapp: selectedExistingClient.whatsapp || "Sem WhatsApp",
-        email: selectedExistingClient.email || null,
-        birthday: null,
+        birthday: null
       };
     }
     return {
       name: clientName,
       whatsapp: clientWhatsapp || "Sem WhatsApp",
-      email: clientEmail?.trim() || null,
-      birthday: clientBirthday,
+      birthday: clientBirthday
     };
   };
 
@@ -252,15 +246,6 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
     }
 
     const client = getClientData();
-
-    if (client.email && !client.email.includes('@')) {
-      toast({
-        title: "Email inválido",
-        description: "Por favor, insira um email válido",
-        variant: "destructive",
-      });
-      return;
-    }
 
     let birthdayISO = null;
     if (client.birthday && client.birthday.trim()) {
@@ -310,7 +295,6 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
         services_data: selectedServices,
       };
 
-      if (client.email) appointmentData.client_email = client.email;
       if (birthdayISO) appointmentData.client_birthday = birthdayISO;
 
       const { error } = await supabase
@@ -333,7 +317,6 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
       setSelectedExistingClient(null);
       setClientSearch("");
       setClientName("");
-      setClientEmail("");
       setClientWhatsapp("");
       setClientBirthday("");
       setStartTime("");
@@ -666,16 +649,6 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
                       value={clientWhatsapp}
                       onChange={(e) => setClientWhatsapp(e.target.value)}
                       placeholder="(11) 98765-4321"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="clientEmail">E-mail (opcional)</Label>
-                    <Input
-                      id="clientEmail"
-                      type="email"
-                      value={clientEmail}
-                      onChange={(e) => setClientEmail(e.target.value)}
-                      placeholder="cliente@email.com"
                     />
                   </div>
                   <div className="space-y-2">
