@@ -3,16 +3,16 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, Calendar, Clock, User, Phone, MessageCircle, Edit, ClipboardCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useSubscription } from "@/hooks/useSubscription";
+import { usePermissions } from "@/hooks/usePermissions";
 import EditAppointmentDialog from "@/components/EditAppointmentDialog";
+import WalkInAppointment from "@/components/WalkInAppointment";
 
 interface Appointment {
   id: string;
@@ -57,12 +57,21 @@ const Appointments = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [activeTab, setActiveTab] = useState("confirmed");
   const [barbershop, setBarbershop] = useState<any>(null);
+  const { permissions, loading: permissionsLoading } = usePermissions();
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [startTime, setStartTime] = useState<string>("");
   const [newClient, setNewClient] = useState({ name: "", whatsapp: "", birthdate: "" });
   const [endTime, setEndTime] = useState<string>("");
+  const [totalHoje, setTotalHoje] = useState(0);
+  const [receitaHoje, setReceitaHoje] = useState(0);
+  const [taxaConfirmacao, setTaxaConfirmacao] = useState(0);
+  const { hasFeature, getPlanName, currentPlan } = useSubscription();
+
+
+  const isOwner = !permissionsLoading && permissions?.role === 'owner';
+  const isBarber = !permissionsLoading && permissions?.role === 'barber';
 
   useEffect(() => {
     checkUser();
@@ -70,6 +79,55 @@ const Appointments = () => {
     const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
     setStartTime(currentTime);
   }, []);
+
+  const loadDashboardStats = async (userId: string) => {
+      const today = new Date().toISOString().split("T")[0];
+  
+      let query = supabase
+        .from("appointments")
+        .select("status, appointment_date, price, barber_id")
+        .eq("appointment_date", today);
+  
+      if (isBarber) {
+        // Barbeiro vê apenas seus próprios agendamentos
+        query = query.eq("barber_id", userId);
+        console.log("🔍 Barbeiro: Buscando apenas agendamentos de", userId);
+      } else if (isOwner && permissions?.ownerId) {
+        // Owner vê todos os agendamentos da equipe
+        const { data: teamMembers } = await supabase
+          .from("profiles")
+          .select("id")
+          .or(`id.eq.${userId},barbershop_id.eq.${userId}`);
+        
+        const barberIds = teamMembers?.map(m => m.id) || [userId];
+        console.log("🔍 Owner: Barber IDs buscando:", barberIds);
+        query = query.in("barber_id", barberIds);
+      }
+  
+      const { data, error } = await query;
+  
+      if (error) {
+        console.error(error);
+        return null;
+      }
+  
+      const totalHoje = data.length;
+  
+      const receitaHoje = data
+        .filter(a => a.status === "completed")
+        .reduce((sum, a) => sum + (a.price || 0), 0);
+  
+      const taxaConfirmacao =
+        totalHoje === 0
+          ? 0
+          : Math.round(
+            (data.filter(a => a.status === "confirmed" || a.status === "completed").length /
+              totalHoje) *
+            100
+          );
+  
+      return { totalHoje, receitaHoje, taxaConfirmacao };
+    };
 
   const checkUser = async () => {
     try {
@@ -82,6 +140,17 @@ const Appointments = () => {
       navigate("/login");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const refreshStats = async () => {
+    if (user) {
+      const stats = await loadDashboardStats(user.id);
+      if (stats) {
+        setTotalHoje(stats.totalHoje);
+        setReceitaHoje(stats.receitaHoje);
+        setTaxaConfirmacao(stats.taxaConfirmacao);
+      }
     }
   };
 
@@ -325,81 +394,14 @@ const Appointments = () => {
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <h1 className="text-2xl font-bold">Meus Agendamentos</h1>
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button className="shadow-gold">
-                  <ClipboardCheck className="h-4 w-4 mr-2" />
-                  Realizar Agendamento
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                  <DialogTitle>Agendamento Manual</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
-                    <p className="text-sm text-blue-600 dark:text-blue-400">
-                      💡 Use este formulário para cadastrar clientes que não têm familiaridade com tecnologia
-                    </p>
-                  </div>
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="name">Cliente</Label>
-                      <Input
-                        id="name"
-                        value={newClient.name}
-                        onChange={(e) => setNewClient({ ...newClient, name: e.target.value })}
-                        placeholder="João da Silva"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="birthdate">Serviço</Label>
-                      <Input
-                        id="birthdate"
-                        type="text"
-                        inputMode="numeric"
-                        value={newClient.birthdate}
-                        onChange={(e) => setNewClient({ ...newClient, birthdate: maskDate(e.target.value) })}
-                        onKeyPress={handleKeyPress}
-                        maxLength={10}
-                        placeholder="DD/MM/AAAA"
-                        className="bg-background"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="startTime">Horário de Início *</Label>
-                      <Input
-                        id="startTime"
-                        type="time"
-                        value={startTime}
-                        onChange={(e) => setStartTime(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="endTime">Horário de Encerramento *</Label>
-                      <Input
-                        id="endTime"
-                        type="time"
-                        value={endTime}
-                        onChange={(e) => setEndTime(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex gap-3 pt-4">
-                    <Button
-                      onClick={handleSaveClient}
-                      disabled={saving || !newClient.name || !newClient.birthdate}
-                      className="flex-1"
-                    >
-                      {saving ? "Salvando..." : "Cadastrar Cliente"}
-                    </Button>
-                    <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
-                      Cancelar
-                    </Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
+
+            {/* Entrada Direta - Disponível para todos */}
+            {user && hasFeature('walk_in') && (
+              <WalkInAppointment 
+                barberId={user.id} 
+                onSuccess={refreshStats}
+              />
+            )}
           </div>
         </div>
       </header>

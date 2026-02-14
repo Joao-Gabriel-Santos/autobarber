@@ -6,7 +6,6 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Calendar, Settings, TrendingUp, LogOut, Copy, ExternalLink, DollarSign, Users, Lock, Clock, ShoppingBasket, ShoppingCart } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import WalkInAppointment from "@/components/WalkInAppointment";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useOwnerSubscription } from "@/hooks/useOwnerSubscription";
@@ -43,15 +42,6 @@ const Dashboard = () => {
   const loadDashboardStats = async (userId: string) => {
     const today = new Date().toISOString().split("T")[0];
 
-    console.log("=== DASHBOARD DEBUG ===");
-    console.log("User ID:", userId);
-    console.log("Date:", today);
-    console.log("Permissions:", permissions);
-    console.log("isOwner:", isOwner);
-    console.log("isBarber:", isBarber);
-    console.log("Owner Plan:", ownerPlan);
-    console.log("Barber Advanced Access:", barberHasAdvancedAccess);
-
     let query = supabase
       .from("appointments")
       .select("status, appointment_date, price, barber_id")
@@ -74,9 +64,6 @@ const Dashboard = () => {
     }
 
     const { data, error } = await query;
-
-    console.log("🔍 Resultado da query:", data?.length || 0, "agendamentos");
-    console.log("======================");
 
     if (error) {
       console.error(error);
@@ -149,17 +136,6 @@ const Dashboard = () => {
       navigate("/login");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const refreshStats = async () => {
-    if (user) {
-      const stats = await loadDashboardStats(user.id);
-      if (stats) {
-        setTotalHoje(stats.totalHoje);
-        setReceitaHoje(stats.receitaHoje);
-        setTaxaConfirmacao(stats.taxaConfirmacao);
-      }
     }
   };
 
@@ -288,13 +264,6 @@ const Dashboard = () => {
               </p>
             </div>
             
-            {/* Entrada Direta - Disponível para todos */}
-            {user && hasFeature('walk_in') && (
-              <WalkInAppointment 
-                barberId={user.id} 
-                onSuccess={refreshStats}
-              />
-            )}
           </div>
 
           {/* Quick Stats - Para Owner */}
