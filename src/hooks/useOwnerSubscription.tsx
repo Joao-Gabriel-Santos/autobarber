@@ -26,8 +26,6 @@ export function useOwnerSubscription(userId: string): OwnerSubscriptionData {
           return;
         }
 
-        console.log("🔍 useOwnerSubscription: Checking for user", userId);
-
         // 1. Buscar perfil do usuário
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
@@ -41,17 +39,13 @@ export function useOwnerSubscription(userId: string): OwnerSubscriptionData {
           return;
         }
 
-        console.log("👤 Profile found:", profile);
-
         // 2. Determinar o owner ID
         let targetOwnerId = userId;
         
         if (profile.role === 'owner') {
           targetOwnerId = userId;
-          console.log("👑 User is owner");
         } else if (profile.role === 'barber' && profile.barbershop_id) {
           targetOwnerId = profile.barbershop_id;
-          console.log("💈 User is barber, owner is", profile.barbershop_id);
         }
 
         setOwnerId(targetOwnerId);
@@ -66,10 +60,8 @@ export function useOwnerSubscription(userId: string): OwnerSubscriptionData {
           .maybeSingle();
 
         if (subError) {
-          console.log("⚠️ Error fetching subscription:", subError.message);
           setOwnerPlan('starter');
         } else if (subData) {
-          console.log("📊 Subscription data:", subData);
           
           // 4. Aplicar a MESMA lógica de validação do useSubscription
           const status = subData.status;
@@ -80,12 +72,8 @@ export function useOwnerSubscription(userId: string): OwnerSubscriptionData {
           
           if (status === 'active' || status === 'trialing') {
             hasAccess = true;
-            console.log('✅ Assinatura válida:', status);
           } else if (status === 'past_due' && currentPeriodEnd > now) {
             hasAccess = true;
-            console.log('⚠️ Assinatura com pagamento atrasado, mas dentro do período');
-          } else {
-            console.log('❌ Assinatura inválida:', status);
           }
 
           // 5. Determinar o plano
@@ -94,17 +82,13 @@ export function useOwnerSubscription(userId: string): OwnerSubscriptionData {
             
             if (['basic', 'starter', 'pro', 'master'].includes(planType)) {
               setOwnerPlan(planType);
-              console.log("✅ Plan set to:", planType);
             } else {
               setOwnerPlan('starter');
-              console.log("⚠️ Unknown plan, defaulting to starter");
             }
           } else {
             setOwnerPlan('starter');
-            console.log("⚠️ No valid subscription, defaulting to starter");
           }
         } else {
-          console.log("⚠️ No subscription found, defaulting to starter");
           setOwnerPlan('starter');
         }
 

@@ -51,7 +51,7 @@ const ClientDashboard = () => {
   };
 
   const handleLogout = () => {
-    navigate(barbershopSlug ? `/book/${barbershopSlug}` : "/");
+    navigate(`/book/${barbershopSlug}/?whatsapp=${encodeURIComponent(whatsapp)}`);
     toast({ title: "Sessão encerrada" });
   };
 

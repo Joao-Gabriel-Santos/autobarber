@@ -4,11 +4,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, TrendingUp, DollarSign, Clock, Award, Calendar, Users, Trophy, Zap, Wallet } from "lucide-react";
+import { ArrowLeft, TrendingUp, DollarSign, Clock, Award, Calendar, Users, Trophy, Zap, Wallet, Scissors, BarChart2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, subMonths, differenceInMinutes } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, ComposedChart, Area } from "recharts";
 import { usePermissions } from "@/hooks/usePermissions";
 
 interface Appointment {
@@ -56,19 +56,26 @@ const Finance = () => {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
-  
+
   // Métricas
   const [weeklyRevenue, setWeeklyRevenue] = useState(0);
   const [monthlyRevenue, setMonthlyRevenue] = useState(0);
-  const [totalRevenue, setTotalRevenue] = useState(0);           // ← NOVO: receita total histórica
+  const [totalRevenue, setTotalRevenue] = useState(0);
   const [totalAppointments, setTotalAppointments] = useState(0);
-  const [allTimeAvgTicket, setAllTimeAvgTicket] = useState(0);   // ← NOVO: ticket médio geral
+  const [allTimeAvgTicket, setAllTimeAvgTicket] = useState(0);
   const [topServices, setTopServices] = useState<ServiceStats[]>([]);
   const [peakHours, setPeakHours] = useState<HourStats[]>([]);
   const [weeklyData, setWeeklyData] = useState<any[]>([]);
   const [monthlyData, setMonthlyData] = useState<any[]>([]);
+  const [monthlyDailyData, setMonthlyDailyData] = useState<any[]>([]); // ← NOVO: dados diários do mês
   const [lastMonthRevenue, setLastMonthRevenue] = useState(0);
   const [barberPerformances, setBarberPerformances] = useState<BarberPerformance[]>([]);
+
+  // ← NOVO: métricas de cortes na semana e mês
+  const [weeklyCount, setWeeklyCount] = useState(0);
+  const [monthlyCount, setMonthlyCount] = useState(0);
+  const [weeklyAvgTicket, setWeeklyAvgTicket] = useState(0);
+  const [monthlyAvgTicket, setMonthlyAvgTicket] = useState(0);
 
   const isOwner = !permissionsLoading && permissions?.role === 'owner';
   const isBarber = !permissionsLoading && permissions?.role === 'barber';
@@ -138,8 +145,8 @@ const Finance = () => {
         const totalAppointments = appointments?.length || 0;
         const totalRevenue = completed.reduce((sum, a) => sum + a.price, 0);
         const avgTicket = completed.length > 0 ? totalRevenue / completed.length : 0;
-        const completionRate = totalAppointments > 0 
-          ? (completed.length / totalAppointments) * 100 
+        const completionRate = totalAppointments > 0
+          ? (completed.length / totalAppointments) * 100
           : 0;
 
         const totalMinutes = completed.reduce((sum, a) => {
@@ -198,7 +205,7 @@ const Finance = () => {
           .from("profiles")
           .select("id")
           .or(`id.eq.${userId},barbershop_id.eq.${userId}`);
-        
+
         const barberIds = teamMembers?.map(m => m.id) || [userId];
         query = query.in("barber_id", barberIds);
       }
@@ -234,7 +241,7 @@ const Finance = () => {
       const monthRev = monthAppointments.reduce((sum, apt) => sum + apt.price, 0);
       const lastMonthRev = lastMonthAppointments.reduce((sum, apt) => sum + apt.price, 0);
 
-      // ─── Receita total histórica e ticket médio geral ───────────────────────
+      // Receita total histórica e ticket médio geral
       const allRev = (appointments || []).reduce((sum, apt) => sum + apt.price, 0);
       const allCount = appointments?.length || 0;
 
@@ -244,7 +251,12 @@ const Finance = () => {
       setTotalRevenue(allRev);
       setTotalAppointments(allCount);
       setAllTimeAvgTicket(allCount > 0 ? allRev / allCount : 0);
-      // ───────────────────────────────────────────────────────────────────────
+
+      // ← NOVO: contagem e ticket médio semanal/mensal
+      setWeeklyCount(weekAppointments.length);
+      setMonthlyCount(monthAppointments.length);
+      setWeeklyAvgTicket(weekAppointments.length > 0 ? weekRev / weekAppointments.length : 0);
+      setMonthlyAvgTicket(monthAppointments.length > 0 ? monthRev / monthAppointments.length : 0);
 
       // Estatísticas de serviços
       const serviceMap = new Map<string, ServiceStats>();
@@ -298,20 +310,20 @@ const Finance = () => {
       });
       setWeeklyData(weekChart);
 
-      // Dados mensais
+      // Dados mensais (3 meses)
       const monthsData = [];
       for (let i = 2; i >= 0; i--) {
         const monthDate = subMonths(now, i);
         const mStart = startOfMonth(monthDate);
         const mEnd = endOfMonth(monthDate);
-        
+
         const mAppointments = appointments?.filter(apt => {
           const date = new Date(apt.appointment_date);
           return date >= mStart && date <= mEnd;
         }) || [];
 
         const revenue = mAppointments.reduce((sum, apt) => sum + apt.price, 0);
-        
+
         monthsData.push({
           month: format(monthDate, 'MMM', { locale: ptBR }),
           revenue,
@@ -319,6 +331,21 @@ const Finance = () => {
         });
       }
       setMonthlyData(monthsData);
+
+      // ← NOVO: dados diários do mês atual
+      const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
+      const dailyChart = monthDays.map(day => {
+        const dayStr = format(day, 'yyyy-MM-dd');
+        const dayAppointments = monthAppointments.filter(apt => apt.appointment_date === dayStr);
+        const revenue = dayAppointments.reduce((sum, apt) => sum + apt.price, 0);
+        return {
+          date: format(day, 'dd/MM'),
+          day: format(day, 'd'),
+          revenue,
+          count: dayAppointments.length,
+        };
+      });
+      setMonthlyDailyData(dailyChart);
 
     } catch (error: any) {
       toast({
@@ -340,9 +367,28 @@ const Finance = () => {
     );
   }
 
-  const growthPercentage = lastMonthRevenue > 0 
+  const growthPercentage = lastMonthRevenue > 0
     ? ((monthlyRevenue - lastMonthRevenue) / lastMonthRevenue * 100).toFixed(1)
     : "0";
+
+  // Tooltip customizado para gráfico duplo (receita + cortes)
+  const CustomDualTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div style={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: 8, padding: '10px 14px' }}>
+          <p style={{ color: '#aaa', marginBottom: 4, fontSize: 12 }}>{label}</p>
+          {payload.map((entry: any, i: number) => (
+            <p key={i} style={{ color: entry.color, margin: '2px 0', fontSize: 13 }}>
+              {entry.name === 'revenue'
+                ? `Receita: R$ ${Number(entry.value).toFixed(2)}`
+                : `Cortes: ${entry.value}`}
+            </p>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
 
   return (
     <div className="min-h-screen bg-gradient-dark">
@@ -357,7 +403,7 @@ const Finance = () => {
                 {isBarber ? "Meu Painel Financeiro" : "Painel Financeiro"}
               </h1>
               <p className="text-sm text-muted-foreground">
-                {isBarber 
+                {isBarber
                   ? "Análise dos seus ganhos e desempenho"
                   : "Análise completa do desempenho da barbearia"
                 }
@@ -403,7 +449,7 @@ const Finance = () => {
             </p>
           </Card>
 
-          {/* Receita Total Histórica — NOVO */}
+          {/* Receita Total Histórica */}
           <Card className="p-6 border-border bg-card hover:border-primary/50 transition-all">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-muted-foreground">
@@ -419,7 +465,7 @@ const Finance = () => {
             </p>
           </Card>
 
-          {/* Ticket Médio — agora calculado sobre todos os atendimentos */}
+          {/* Ticket Médio Geral */}
           <Card className="p-6 border-border bg-card hover:border-primary/50 transition-all">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-muted-foreground">Ticket Médio</span>
@@ -448,6 +494,7 @@ const Finance = () => {
             )}
           </TabsList>
 
+          {/* ── Visão Geral ───────────────────────────────────────────────── */}
           <TabsContent value="overview" className="space-y-6">
             <div className="grid lg:grid-cols-2 gap-6">
               <Card className="p-6 border-border bg-card">
@@ -457,7 +504,7 @@ const Finance = () => {
                     <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                     <XAxis dataKey="date" stroke="#888" />
                     <YAxis stroke="#888" />
-                    <Tooltip 
+                    <Tooltip
                       contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333' }}
                       formatter={(value: any) => `R$ ${value.toFixed(2)}`}
                     />
@@ -473,14 +520,14 @@ const Finance = () => {
                     <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                     <XAxis dataKey="month" stroke="#888" />
                     <YAxis stroke="#888" />
-                    <Tooltip 
+                    <Tooltip
                       contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333' }}
                       formatter={(value: any) => `R$ ${value.toFixed(2)}`}
                     />
-                    <Line 
-                      type="monotone" 
-                      dataKey="revenue" 
-                      stroke="#FFD700" 
+                    <Line
+                      type="monotone"
+                      dataKey="revenue"
+                      stroke="#FFD700"
                       strokeWidth={3}
                       dot={{ fill: '#FFD700', r: 6 }}
                     />
@@ -490,7 +537,124 @@ const Finance = () => {
             </div>
           </TabsContent>
 
+          {/* ── Serviços ──────────────────────────────────────────────────── */}
           <TabsContent value="services" className="space-y-6">
+
+            {/* ← NOVO: Cards de métricas de cortes */}
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card className="p-5 border-border bg-card hover:border-primary/50 transition-all">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-muted-foreground">Cortes na Semana</span>
+                  <Scissors className="h-4 w-4 text-primary" />
+                </div>
+                <p className="text-3xl font-bold text-primary">{weeklyCount}</p>
+                <p className="text-xs text-muted-foreground mt-1">Esta semana</p>
+              </Card>
+
+              <Card className="p-5 border-border bg-card hover:border-primary/50 transition-all">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-muted-foreground">Média / Dia (Semana)</span>
+                  <TrendingUp className="h-4 w-4 text-green-500" />
+                </div>
+                <p className="text-3xl font-bold text-green-400">
+                  {(weeklyCount / 7).toFixed(1)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Ticket médio: R$ {weeklyAvgTicket.toFixed(2)}
+                </p>
+              </Card>
+
+              <Card className="p-5 border-border bg-card hover:border-primary/50 transition-all">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-muted-foreground">Cortes no Mês</span>
+                  <BarChart2 className="h-4 w-4 text-blue-400" />
+                </div>
+                <p className="text-3xl font-bold text-blue-400">{monthlyCount}</p>
+                <p className="text-xs text-muted-foreground mt-1">Este mês</p>
+              </Card>
+
+              <Card className="p-5 border-border bg-card hover:border-primary/50 transition-all">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-muted-foreground">Média / Dia (Mês)</span>
+                  <TrendingUp className="h-4 w-4 text-orange-400" />
+                </div>
+                <p className="text-3xl font-bold text-orange-400">
+                  {monthlyDailyData.length > 0
+                    ? (monthlyCount / monthlyDailyData.filter(d => d.count > 0).length || monthlyDailyData.length).toFixed(1)
+                    : "0.0"}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Ticket médio: R$ {monthlyAvgTicket.toFixed(2)}
+                </p>
+              </Card>
+            </div>
+
+            {/* ← NOVO: Gráfico mensal detalhado (cortes + receita por dia) */}
+            <Card className="p-6 border-border bg-card">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-lg">Desempenho Diário do Mês</h3>
+                <span className="text-xs text-muted-foreground capitalize">
+                  {format(new Date(), "MMMM yyyy", { locale: ptBR })}
+                </span>
+              </div>
+              <ResponsiveContainer width="100%" height={340}>
+                <ComposedChart data={monthlyDailyData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
+                  <XAxis
+                    dataKey="day"
+                    stroke="#666"
+                    tick={{ fontSize: 11 }}
+                    interval={1}
+                  />
+                  <YAxis
+                    yAxisId="revenue"
+                    orientation="left"
+                    stroke="#FFD700"
+                    tick={{ fontSize: 11, fill: '#FFD700' }}
+                    tickFormatter={(v) => `R$${v}`}
+                  />
+                  <YAxis
+                    yAxisId="count"
+                    orientation="right"
+                    stroke="#60a5fa"
+                    tick={{ fontSize: 11, fill: '#60a5fa' }}
+                    allowDecimals={false}
+                  />
+                  <Tooltip content={<CustomDualTooltip />} />
+                  <Bar
+                    yAxisId="revenue"
+                    dataKey="revenue"
+                    name="revenue"
+                    fill="#FFD700"
+                    fillOpacity={0.85}
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={28}
+                  />
+                  <Line
+                    yAxisId="count"
+                    type="monotone"
+                    dataKey="count"
+                    name="count"
+                    stroke="#60a5fa"
+                    strokeWidth={2.5}
+                    dot={{ fill: '#60a5fa', r: 3 }}
+                    activeDot={{ r: 5 }}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+              <div className="flex items-center gap-6 justify-center mt-3 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-3 h-3 rounded-sm bg-primary" />
+                  Receita (R$)
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-3 h-[3px] bg-blue-400 rounded" />
+                  Qtd. de Cortes
+                </span>
+              </div>
+            </Card>
+
+            {/* Cards existentes: Top 5 + Distribuição */}
             <div className="grid lg:grid-cols-2 gap-6">
               <Card className="p-6 border-border bg-card">
                 <h3 className="font-bold text-lg mb-4">Top 5 Serviços</h3>
@@ -533,7 +697,7 @@ const Finance = () => {
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip 
+                    <Tooltip
                       contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333' }}
                     />
                   </PieChart>
@@ -542,6 +706,7 @@ const Finance = () => {
             </div>
           </TabsContent>
 
+          {/* ── Horários ──────────────────────────────────────────────────── */}
           <TabsContent value="schedule" className="space-y-6">
             <Card className="p-6 border-border bg-card">
               <h3 className="font-bold text-lg mb-4">Horários de Pico</h3>
@@ -550,7 +715,7 @@ const Finance = () => {
                   <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                   <XAxis type="number" stroke="#888" />
                   <YAxis dataKey="hour" type="category" stroke="#888" />
-                  <Tooltip 
+                  <Tooltip
                     contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333' }}
                   />
                   <Bar dataKey="count" fill="#FFD700" radius={[0, 8, 8, 0]} />
@@ -562,6 +727,7 @@ const Finance = () => {
             </Card>
           </TabsContent>
 
+          {/* ── Colaboradores (owner only) ─────────────────────────────────── */}
           {isOwner && (
             <TabsContent value="team" className="space-y-6">
               <div className="grid gap-4">
@@ -642,7 +808,7 @@ const Finance = () => {
                         <span className="font-semibold">{barber.completion_rate.toFixed(1)}%</span>
                       </div>
                       <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
-                        <div 
+                        <div
                           className="h-full bg-gradient-gold transition-all"
                           style={{ width: `${barber.completion_rate}%` }}
                         />

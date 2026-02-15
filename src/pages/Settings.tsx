@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useSubscription } from "@/hooks/useSubscription";
+import { useManagePlan } from "@/hooks/useManagePlan";
 import { Badge } from "@/components/ui/badge";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Slider } from "@/components/ui/slider";
@@ -19,6 +20,7 @@ const SettingsPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { permissions } = usePermissions();
+  const { openPortal, loading: portalLoading } = useManagePlan();
   const [user, setUser] = useState<any>(null);
   const [barbershopId, setBarbershopId] = useState<string>("");
   const [loading, setLoading] = useState(true);
@@ -385,20 +387,16 @@ const SettingsPage = () => {
                 )}
               </div>
 
-              <div className="mt-4 flex gap-2">
+              {/* CORRIGIDO: um único botão que abre o Stripe Customer Portal */}
+              <div className="mt-4">
                 <Button
                   variant="outline"
-                  onClick={() => {
-                    window.open('https://billing.stripe.com/p/login/3cI6oG25w02o2J0fN0a3u00', '_blank');
-                  }}
+                  onClick={openPortal}
+                  disabled={portalLoading}
+                  className="w-full"
                 >
-                  Gerenciar Assinatura
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => navigate("/signup")}
-                >
-                  Mudar de Plano
+                  <CreditCard className="h-4 w-4 mr-2" />
+                  {portalLoading ? "Aguarde..." : "Gerenciar / Mudar Plano"}
                 </Button>
               </div>
             </Card>
@@ -411,6 +409,13 @@ const SettingsPage = () => {
                   ⚠️ Sua assinatura expirou. Renove para continuar usando o AutoBarber.
                 </AlertDescription>
               </Alert>
+              <Button
+                onClick={openPortal}
+                disabled={portalLoading}
+                className="mt-3 w-full shadow-gold"
+              >
+                {portalLoading ? "Aguarde..." : "Renovar Assinatura"}
+              </Button>
             </div>
           )}
         </div>

@@ -116,7 +116,6 @@ const ClientAppointments = () => {
 
       const dashboardUrl = `/client-dashboard?whatsapp=${encodeURIComponent(normalizedWhatsapp)}&barbershop_id=${client.barbershop_id}&barbershop_slug=${barbershopSlug}`;
       
-      console.log("Redirecting to:", dashboardUrl);
       navigate(dashboardUrl);
 
     } catch (error: any) {

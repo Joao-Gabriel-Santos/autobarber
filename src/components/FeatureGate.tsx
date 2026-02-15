@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import React from "react";
 import { useSubscription } from "@/hooks/useSubscription";
+import { useManagePlan } from "@/hooks/useManagePlan";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ interface FeatureGateProps {
 
 export const FeatureGate = ({ feature, children, fallback }: FeatureGateProps) => {
   const { hasFeature, suggestUpgrade, getPlanName, loading } = useSubscription();
+  const { openPortal, loading: portalLoading } = useManagePlan();
   const navigate = useNavigate();
   const [userRole, setUserRole] = React.useState<'owner' | 'barber' | null>(null);
 
@@ -120,7 +122,7 @@ export const FeatureGate = ({ feature, children, fallback }: FeatureGateProps) =
     );
   }
 
-  // 👔 OWNERS: Mostrar opções de upgrade
+  // 👔 OWNERS: Botão abre o Stripe Customer Portal
   return (
     <div className="min-h-screen bg-gradient-dark flex items-center justify-center p-4">
       <Card className="p-8 max-w-md w-full text-center border-border bg-card">
@@ -144,11 +146,12 @@ export const FeatureGate = ({ feature, children, fallback }: FeatureGateProps) =
         
         <div className="space-y-3">
           <Button 
-            onClick={() => navigate("/signup")}
+            onClick={openPortal}
+            disabled={portalLoading}
             className="w-full shadow-gold"
             size="lg"
           >
-            Fazer Upgrade
+            {portalLoading ? "Aguarde..." : "Fazer Upgrade"}
           </Button>
           
           <Button 
