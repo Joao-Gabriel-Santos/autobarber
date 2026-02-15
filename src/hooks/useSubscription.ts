@@ -95,7 +95,6 @@ export function useSubscription(): UseSubscriptionReturn {
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
-        console.log('⚠️ Usuário não autenticado, usando starter');
         setSubscription(null);
         setHasAccess(false);
         setCurrentPlan('starter');
@@ -115,7 +114,7 @@ export function useSubscription(): UseSubscriptionReturn {
       // Se for barbeiro, buscar assinatura do owner
       if (profile?.role === 'barber' && profile.barbershop_id) {
         ownerId = profile.barbershop_id;
-        console.log('👤 Barbeiro detectado, buscando plano do owner:', ownerId);
+        
       }
 
       // Buscar assinatura do owner
@@ -149,13 +148,9 @@ export function useSubscription(): UseSubscriptionReturn {
         // Não verificar data se status for 'active' (Stripe já gerencia isso)
         if (status === 'active' || status === 'trialing') {
           accessStatus = true;
-          console.log('✅ Assinatura válida:', status);
         } else if (status === 'past_due' && currentPeriodEnd > now) {
           // Dar tolerância para pagamentos atrasados dentro do período
           accessStatus = true;
-          console.log('⚠️ Assinatura com pagamento atrasado, mas dentro do período');
-        } else {
-          console.log('❌ Assinatura inválida:', status, 'Data fim:', currentPeriodEnd);
         }
 
         const planType = subData.plan.toLowerCase() as PlanType;
@@ -163,13 +158,6 @@ export function useSubscription(): UseSubscriptionReturn {
         if (planType in PLAN_FEATURES) {
           finalPlan = planType;
         }
-
-        console.log('📊 Status final:', {
-          plan: finalPlan,
-          hasAccess: accessStatus,
-          status: status,
-          periodEnd: currentPeriodEnd.toISOString()
-        });
       }
       
       setSubscription(subData);

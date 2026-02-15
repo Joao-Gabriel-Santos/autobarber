@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useOwnerSubscription } from "@/hooks/useOwnerSubscription";
+import { useManagePlan } from "@/hooks/useManagePlan";
 import { SubscriptionGate } from "@/components/SubscriptionGate";
 import { Users as UsersIcon } from "lucide-react";
 
@@ -17,6 +18,7 @@ const Dashboard = () => {
   const { toast } = useToast();
   const { permissions, loading: permissionsLoading } = usePermissions();
   const { hasFeature, getPlanName, currentPlan } = useSubscription();
+  const { openPortal, loading: portalLoading } = useManagePlan();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [barbershopSlug, setBarbershopSlug] = useState<string>("");
@@ -26,18 +28,24 @@ const Dashboard = () => {
   const [receitaHoje, setReceitaHoje] = useState(0);
   const [taxaConfirmacao, setTaxaConfirmacao] = useState(0);
 
-  // Hook para verificar plano do owner (para barbeiros)
   const { ownerPlan, loading: ownerPlanLoading } = useOwnerSubscription(user?.id || '');
 
-  // Definir tipo de usuário
   const isOwner = !permissionsLoading && permissions?.role === 'owner';
   const isBarber = !permissionsLoading && permissions?.role === 'barber';
-  
-  // Para barbeiros, verificar se o owner tem plano Master (para acessar agendamentos e horários)
   const barberHasAdvancedAccess = isBarber && ownerPlan === 'master';
-  
-  // Barbeiros sempre têm acesso ao financeiro (seus próprios ganhos)
   const barberHasFinanceAccess = isBarber;
+
+  // Botão de upgrade unificado — abre o Stripe Customer Portal
+  const UpgradeButton = ({ label = "Fazer Upgrade" }: { label?: string }) => (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={portalLoading}
+      onClick={openPortal}
+    >
+      {portalLoading ? "Aguarde..." : label}
+    </Button>
+  );
 
   const loadDashboardStats = async (userId: string) => {
     const today = new Date().toISOString().split("T")[0];
@@ -48,15 +56,13 @@ const Dashboard = () => {
       .eq("appointment_date", today);
 
     if (isBarber) {
-      // Barbeiro vê apenas seus próprios agendamentos
       query = query.eq("barber_id", userId);
     } else if (isOwner && permissions?.ownerId) {
-      // Owner vê todos os agendamentos da equipe
       const { data: teamMembers } = await supabase
         .from("profiles")
         .select("id")
         .or(`id.eq.${userId},barbershop_id.eq.${userId}`);
-      
+
       const barberIds = teamMembers?.map(m => m.id) || [userId];
       query = query.in("barber_id", barberIds);
     }
@@ -69,19 +75,17 @@ const Dashboard = () => {
     }
 
     const totalHoje = data.length;
-
     const receitaHoje = data
       .filter(a => a.status === "completed")
       .reduce((sum, a) => sum + (a.price || 0), 0);
-
     const taxaConfirmacao =
       totalHoje === 0
         ? 0
         : Math.round(
-          (data.filter(a => a.status === "confirmed" || a.status === "completed").length /
-            totalHoje) *
-          100
-        );
+            (data.filter(a => a.status === "confirmed" || a.status === "completed").length /
+              totalHoje) *
+              100
+          );
 
     return { totalHoje, receitaHoje, taxaConfirmacao };
   };
@@ -103,13 +107,12 @@ const Dashboard = () => {
         .eq("id", user.id)
         .maybeSingle();
 
-      if (profileError) {
-        console.error("Error loading profile:", profileError);
-      }
+      if (profileError) console.error("Error loading profile:", profileError);
 
-      const targetId = profile?.role === 'barber' && profile.barbershop_id 
-        ? profile.barbershop_id 
-        : user.id;
+      const targetId =
+        profile?.role === 'barber' && profile.barbershop_id
+          ? profile.barbershop_id
+          : user.id;
 
       const { data: barbershop, error: barbershopError } = await supabase
         .from("barbershops")
@@ -117,18 +120,14 @@ const Dashboard = () => {
         .eq("barber_id", targetId)
         .maybeSingle();
 
-      if (barbershopError) {
-        console.error("Error loading barbershop:", barbershopError);
-      }
+      if (barbershopError) console.error("Error loading barbershop:", barbershopError);
 
       if (barbershop) {
         setBarbershopSlug(barbershop.slug || "");
         setBarbershopName(barbershop.barbershop_name || "");
       }
 
-      if (profile) {
-        setFullName(profile.full_name || "");
-      }
+      if (profile) setFullName(profile.full_name || "");
     } catch (error) {
       console.error("Error checking user:", error);
       navigate("/login");
@@ -143,7 +142,6 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (user && !permissionsLoading && permissions && !ownerPlanLoading) {
-      console.log("✅ Permissions e Owner Plan carregados, buscando stats...");
       loadDashboardStats(user.id).then(stats => {
         if (stats) {
           setTotalHoje(stats.totalHoje);
@@ -157,16 +155,10 @@ const Dashboard = () => {
   const handleLogout = async () => {
     try {
       await supabase.auth.signOut();
-      toast({
-        title: "Logout realizado",
-        description: "Até logo!",
-      });
+      toast({ title: "Logout realizado", description: "Até logo!" });
       navigate("/");
     } catch (error) {
-      toast({
-        title: "Erro ao fazer logout",
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao fazer logout", variant: "destructive" });
     }
   };
 
@@ -179,13 +171,9 @@ const Dashboard = () => {
       });
       return;
     }
-
     const link = `${window.location.origin}/book/${barbershopSlug}`;
     navigator.clipboard.writeText(link);
-    toast({
-      title: "Link copiado!",
-      description: "O link foi copiado para a área de transferência",
-    });
+    toast({ title: "Link copiado!", description: "O link foi copiado para a área de transferência" });
   };
 
   const openBookingPage = () => {
@@ -197,7 +185,6 @@ const Dashboard = () => {
       });
       return;
     }
-
     window.open(`${window.location.origin}/book/${barbershopSlug}`, '_blank');
   };
 
@@ -236,6 +223,18 @@ const Dashboard = () => {
                     </span>
                   )}
                 </span>
+                {/* Botão de gerenciar plano no header para owners */}
+                {isOwner && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={openPortal}
+                    disabled={portalLoading}
+                    className="hidden sm:flex text-xs text-muted-foreground"
+                  >
+                    {portalLoading ? "Aguarde..." : `${getPlanName()} · Gerenciar`}
+                  </Button>
+                )}
                 <Button variant="outline" size="icon" onClick={() => navigate("/settings")}>
                   <Settings className="h-4 w-4" />
                 </Button>
@@ -255,16 +254,14 @@ const Dashboard = () => {
                 Olá, <span className="text-primary">{fullName || "Barbeiro"}</span>
               </h1>
               <p className="text-muted-foreground">
-                {isBarber 
+                {isBarber
                   ? `Você é barbeiro da ${barbershopName || "barbearia"} - ${ownerPlan === 'master' ? 'Acesso Master' : 'Acesso Starter'}`
-                  : `Bem-vindo ao painel da ${barbershopName || "sua barbearia"}`
-                }
+                  : `Bem-vindo ao painel da ${barbershopName || "sua barbearia"}`}
               </p>
             </div>
-            
           </div>
 
-          {/* Quick Stats - Para Owner */}
+          {/* Quick Stats - Owner */}
           {isOwner && (
             <div className="grid md:grid-cols-3 gap-6 mb-8">
               <a href="/dashboard/appointments">
@@ -295,10 +292,9 @@ const Dashboard = () => {
             </div>
           )}
 
-          {/* Quick Stats - Para Barbeiros (Master e Starter) */}
+          {/* Quick Stats - Barbeiros */}
           {isBarber && (
             <div className="grid md:grid-cols-2 gap-6 mb-8">
-              {/* Agendamentos - Apenas para Master */}
               {barberHasAdvancedAccess && (
                 <div className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all">
                   <div className="flex items-center justify-between mb-2">
@@ -308,8 +304,6 @@ const Dashboard = () => {
                   <p className="text-3xl font-bold">{totalHoje}</p>
                 </div>
               )}
-
-              {/* Receita - Todos os barbeiros */}
               <div className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-muted-foreground text-sm">Minha Receita Hoje</span>
@@ -317,7 +311,6 @@ const Dashboard = () => {
                 </div>
                 <p className="text-3xl font-bold">R${receitaHoje.toFixed(2)}</p>
               </div>
-
               {barberHasAdvancedAccess && (
                 <div className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all">
                   <div className="flex items-center justify-between mb-2">
@@ -332,9 +325,8 @@ const Dashboard = () => {
 
           {/* Action Cards */}
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            
+
             {/* HORÁRIOS */}
-            {/* Owner: Conforme plano */}
             {isOwner && hasFeature('schedule') && (
               <div
                 className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
@@ -344,36 +336,20 @@ const Dashboard = () => {
                   <Clock className="h-6 w-6 text-primary" />
                 </div>
                 <h3 className="font-bold text-xl mb-2">Horários</h3>
-                <p className="text-muted-foreground text-sm">
-                  Configure horários de funcionamento
-                </p>
+                <p className="text-muted-foreground text-sm">Configure horários de funcionamento</p>
               </div>
             )}
-            
-            {/* Owner sem feature */}
             {isOwner && !hasFeature('schedule') && (
-              <div className="bg-card border border-border rounded-xl p-6 opacity-50 relative">
-                <div className="absolute top-4 right-4">
-                  <Lock className="h-5 w-5 text-muted-foreground" />
-                </div>
+              <div className="bg-card border border-border rounded-xl p-6 opacity-60 relative">
+                <div className="absolute top-4 right-4"><Lock className="h-5 w-5 text-muted-foreground" /></div>
                 <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center mb-4">
                   <Clock className="h-6 w-6 text-muted-foreground" />
                 </div>
                 <h3 className="font-bold text-xl mb-2">Horários</h3>
-                <p className="text-muted-foreground text-sm mb-3">
-                  Configure horários de funcionamento
-                </p>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => navigate("/signup")}
-                >
-                  Upgrade para Pro
-                </Button>
+                <p className="text-muted-foreground text-sm mb-3">Configure horários de funcionamento</p>
+                <UpgradeButton label="Upgrade para Pro" />
               </div>
             )}
-
-            {/* Barbeiro Master: Tem acesso */}
             {isBarber && barberHasAdvancedAccess && (
               <div
                 className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
@@ -383,14 +359,11 @@ const Dashboard = () => {
                   <Clock className="h-6 w-6 text-primary" />
                 </div>
                 <h3 className="font-bold text-xl mb-2">Meus Horários</h3>
-                <p className="text-muted-foreground text-sm">
-                  Configure sua disponibilidade semanal
-                </p>
+                <p className="text-muted-foreground text-sm">Configure sua disponibilidade semanal</p>
               </div>
             )}
 
             {/* AGENDAMENTOS */}
-            {/* Owner: Conforme plano */}
             {isOwner && hasFeature('online_booking') && (
               <div
                 className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
@@ -400,36 +373,20 @@ const Dashboard = () => {
                   <Calendar className="h-6 w-6 text-primary" />
                 </div>
                 <h3 className="font-bold text-xl mb-2">Agendamentos</h3>
-                <p className="text-muted-foreground text-sm">
-                  Visualize e gerencie todos os agendamentos
-                </p>
+                <p className="text-muted-foreground text-sm">Visualize e gerencie todos os agendamentos</p>
               </div>
             )}
-
-            {/* Owner sem feature */}
             {isOwner && !hasFeature('online_booking') && (
-              <div className="bg-card border border-border rounded-xl p-6 opacity-50 relative">
-                <div className="absolute top-4 right-4">
-                  <Lock className="h-5 w-5 text-muted-foreground" />
-                </div>
+              <div className="bg-card border border-border rounded-xl p-6 opacity-60 relative">
+                <div className="absolute top-4 right-4"><Lock className="h-5 w-5 text-muted-foreground" /></div>
                 <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center mb-4">
                   <Calendar className="h-6 w-6 text-muted-foreground" />
                 </div>
                 <h3 className="font-bold text-xl mb-2">Agendamentos</h3>
-                <p className="text-muted-foreground text-sm mb-3">
-                  Sistema de agendamento online
-                </p>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => navigate("/signup")}
-                >
-                  Upgrade para Pro
-                </Button>
+                <p className="text-muted-foreground text-sm mb-3">Sistema de agendamento online</p>
+                <UpgradeButton label="Upgrade para Pro" />
               </div>
             )}
-
-            {/* Barbeiro Master: Tem acesso */}
             {isBarber && barberHasAdvancedAccess && (
               <div
                 className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
@@ -439,13 +396,11 @@ const Dashboard = () => {
                   <Calendar className="h-6 w-6 text-primary" />
                 </div>
                 <h3 className="font-bold text-xl mb-2">Meus Agendamentos</h3>
-                <p className="text-muted-foreground text-sm">
-                  Visualize e gerencie seus agendamentos
-                </p>
+                <p className="text-muted-foreground text-sm">Visualize e gerencie seus agendamentos</p>
               </div>
             )}
 
-            {/* SERVIÇOS - Apenas Owner */}
+            {/* SERVIÇOS */}
             {isOwner && hasFeature('services') && (
               <div
                 className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
@@ -455,14 +410,11 @@ const Dashboard = () => {
                   <Settings className="h-6 w-6 text-primary" />
                 </div>
                 <h3 className="font-bold text-xl mb-2">Serviços</h3>
-                <p className="text-muted-foreground text-sm">
-                  Gerencie preços, duração e fotos dos cortes
-                </p>
+                <p className="text-muted-foreground text-sm">Gerencie preços, duração e fotos dos cortes</p>
               </div>
             )}
 
             {/* FINANCEIRO */}
-            {/* Owner: Conforme plano */}
             {isOwner && hasFeature('finance') && (
               <div
                 className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
@@ -472,13 +424,9 @@ const Dashboard = () => {
                   <DollarSign className="h-6 w-6 text-primary" />
                 </div>
                 <h3 className="font-bold text-xl mb-2">Financeiro</h3>
-                <p className="text-muted-foreground text-sm">
-                  Análise detalhada de receitas e métricas
-                </p>
+                <p className="text-muted-foreground text-sm">Análise detalhada de receitas e métricas</p>
               </div>
             )}
-
-            {/* Barbeiro: Sempre tem acesso (seus próprios ganhos) */}
             {isBarber && (
               <div
                 className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
@@ -488,13 +436,11 @@ const Dashboard = () => {
                   <DollarSign className="h-6 w-6 text-primary" />
                 </div>
                 <h3 className="font-bold text-xl mb-2">Meu Financeiro</h3>
-                <p className="text-muted-foreground text-sm">
-                  Visualize seus ganhos e métricas
-                </p>
+                <p className="text-muted-foreground text-sm">Visualize seus ganhos e métricas</p>
               </div>
             )}
 
-            {/* CLIENTES - Apenas Owner */}
+            {/* CLIENTES */}
             {isOwner && (
               <div
                 className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
@@ -504,13 +450,11 @@ const Dashboard = () => {
                   <UsersIcon className="h-6 w-6 text-primary" />
                 </div>
                 <h3 className="font-bold text-xl mb-2">Clientes</h3>
-                <p className="text-muted-foreground text-sm">
-                  Visualize e gerencie sua base de clientes
-                </p>
+                <p className="text-muted-foreground text-sm">Visualize e gerencie sua base de clientes</p>
               </div>
             )}
 
-            {/* ✅ PRODUTOS - Apenas Owner Master */}
+            {/* PRODUTOS */}
             {isOwner && (
               <>
                 {currentPlan === 'master' ? (
@@ -522,35 +466,23 @@ const Dashboard = () => {
                       <ShoppingBasket className="h-6 w-6 text-primary" />
                     </div>
                     <h3 className="font-bold text-xl mb-2">Produtos</h3>
-                    <p className="text-muted-foreground text-sm">
-                      Gerencie produtos e estoque
-                    </p>
+                    <p className="text-muted-foreground text-sm">Gerencie produtos e estoque</p>
                   </div>
                 ) : (
-                  <div className="bg-card border border-border rounded-xl p-6 opacity-50 relative">
-                    <div className="absolute top-4 right-4">
-                      <Lock className="h-5 w-5 text-muted-foreground" />
-                    </div>
+                  <div className="bg-card border border-border rounded-xl p-6 opacity-60 relative">
+                    <div className="absolute top-4 right-4"><Lock className="h-5 w-5 text-muted-foreground" /></div>
                     <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center mb-4">
                       <ShoppingBasket className="h-6 w-6 text-muted-foreground" />
                     </div>
                     <h3 className="font-bold text-xl mb-2">Produtos</h3>
-                    <p className="text-muted-foreground text-sm mb-3">
-                      Gerencie produtos e estoque
-                    </p>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => navigate("/signup")}
-                    >
-                      Upgrade para Master
-                    </Button>
+                    <p className="text-muted-foreground text-sm mb-3">Gerencie produtos e estoque</p>
+                    <UpgradeButton label="Upgrade para Master" />
                   </div>
                 )}
               </>
             )}
 
-            {/* ✅ ESTOQUE - Apenas Owner Master */}
+            {/* ESTOQUE */}
             {isOwner && (
               <>
                 {currentPlan === 'master' ? (
@@ -562,35 +494,23 @@ const Dashboard = () => {
                       <ShoppingCart className="h-6 w-6 text-primary" />
                     </div>
                     <h3 className="font-bold text-xl mb-2">Estoque</h3>
-                    <p className="text-muted-foreground text-sm">
-                      Gerencie seu estoque
-                    </p>
+                    <p className="text-muted-foreground text-sm">Gerencie seu estoque</p>
                   </div>
                 ) : (
-                  <div className="bg-card border border-border rounded-xl p-6 opacity-50 relative">
-                    <div className="absolute top-4 right-4">
-                      <Lock className="h-5 w-5 text-muted-foreground" />
-                    </div>
+                  <div className="bg-card border border-border rounded-xl p-6 opacity-60 relative">
+                    <div className="absolute top-4 right-4"><Lock className="h-5 w-5 text-muted-foreground" /></div>
                     <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center mb-4">
                       <ShoppingCart className="h-6 w-6 text-muted-foreground" />
                     </div>
                     <h3 className="font-bold text-xl mb-2">Estoque</h3>
-                    <p className="text-muted-foreground text-sm mb-3">
-                      Gerencie seu estoque
-                    </p>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => navigate("/signup")}
-                    >
-                      Upgrade para Master
-                    </Button>
+                    <p className="text-muted-foreground text-sm mb-3">Gerencie seu estoque</p>
+                    <UpgradeButton label="Upgrade para Master" />
                   </div>
                 )}
               </>
             )}
 
-            {/* EQUIPE - Apenas Owner Master */}
+            {/* EQUIPE */}
             {isOwner && hasFeature('team_management') ? (
               <div
                 className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
@@ -600,71 +520,51 @@ const Dashboard = () => {
                   <Users className="h-6 w-6 text-primary" />
                 </div>
                 <h3 className="font-bold text-xl mb-2">Equipe</h3>
-                <p className="text-muted-foreground text-sm">
-                  Gerencie barbeiros e convites
-                </p>
+                <p className="text-muted-foreground text-sm">Gerencie barbeiros e convites</p>
               </div>
             ) : isOwner && (
-              <div className="bg-card border border-border rounded-xl p-6 opacity-50 relative">
-                <div className="absolute top-4 right-4">
-                  <Lock className="h-5 w-5 text-muted-foreground" />
-                </div>
+              <div className="bg-card border border-border rounded-xl p-6 opacity-60 relative">
+                <div className="absolute top-4 right-4"><Lock className="h-5 w-5 text-muted-foreground" /></div>
                 <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center mb-4">
                   <Users className="h-6 w-6 text-muted-foreground" />
                 </div>
                 <h3 className="font-bold text-xl mb-2">Equipe</h3>
-                <p className="text-muted-foreground text-sm mb-3">
-                  Gerencie barbeiros e convites
-                </p>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => navigate("/signup")}
-                >
-                  Upgrade para Master
-                </Button>
+                <p className="text-muted-foreground text-sm mb-3">Gerencie barbeiros e convites</p>
+                <UpgradeButton label="Upgrade para Master" />
               </div>
             )}
           </div>
 
-          {/* Link Público - Apenas Owner Pro e Master */}
+          {/* Link Público - Owner Pro/Master */}
           {isOwner && hasFeature('custom_link') && (
             <div className="mt-8">
               <Card className="p-6 border-border bg-card">
                 <h3 className="font-bold text-lg mb-2">Link de Agendamento</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Compartilhe este link com seus clientes:
-                </p>
+                <p className="text-sm text-muted-foreground mb-4">Compartilhe este link com seus clientes:</p>
                 {!barbershopSlug ? (
                   <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 mb-4">
                     <p className="text-sm text-yellow-600 dark:text-yellow-400">
                       ⚠️ Configure seu link personalizado nas configurações.
                     </p>
-                    <Button
-                      onClick={() => navigate("/settings")}
-                      variant="outline"
-                      className="mt-2"
-                    >
+                    <Button onClick={() => navigate("/settings")} variant="outline" className="mt-2">
                       Ir para Configurações
                     </Button>
                   </div>
                 ) : (
-                  <>
-                    <div className="flex gap-2">
-                      <Input
-                        readOnly
-                        value={`${window.location.origin}/book/${barbershopSlug}`}
-                        className="flex-1 bg-background"
-                      />
-                      <Button onClick={copyBookingLink}>
-                        <Copy className="h-4 w-4 mr-2" />
-                        Copiar
-                      </Button>
-                      <Button onClick={openBookingPage} variant="outline">
-                        <ExternalLink className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </>
+                  <div className="flex gap-2">
+                    <Input
+                      readOnly
+                      value={`${window.location.origin}/book/${barbershopSlug}`}
+                      className="flex-1 bg-background"
+                    />
+                    <Button onClick={copyBookingLink}>
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copiar
+                    </Button>
+                    <Button onClick={openBookingPage} variant="outline">
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                  </div>
                 )}
               </Card>
             </div>
@@ -675,9 +575,7 @@ const Dashboard = () => {
             <div className="mt-8">
               <Card className="p-6 border-border bg-card">
                 <h3 className="font-bold text-lg mb-2">Link de Agendamento</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Compartilhe este link com seus clientes:
-                </p>
+                <p className="text-sm text-muted-foreground mb-4">Compartilhe este link com seus clientes:</p>
                 <div className="flex gap-2">
                   <Input
                     readOnly
