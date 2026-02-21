@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UserPlus, Plus, Minus, Trash2, Users, UserCheck, ChevronDown, Search, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -62,6 +63,7 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
   const [clientBirthday, setClientBirthday] = useState("");
   const [startTime, setStartTime] = useState<string>("");
   const [endTime, setEndTime] = useState<string>("");
+  const [paymentMethod, setPaymentMethod] = useState<string>("");
 
   const isStarter = currentPlan === 'starter';
 
@@ -99,11 +101,6 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
     setServices(data || []);
   };
 
-  /**
-   * CORREÇÃO: Busca clientes diretamente da tabela `clients` usando `barbershop_id`.
-   * Antes buscava de `appointments`, o que perdia clientes que ainda não tinham
-   * nenhum agendamento registrado.
-   */
   const loadExistingClients = async () => {
     setLoadingClients(true);
     try {
@@ -213,7 +210,6 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
     return `${year}-${month}-${day}`;
   };
 
-  // Resolve the final client data for submission
   const getClientData = () => {
     if (clientType === "existing" && selectedExistingClient) {
       return {
@@ -293,6 +289,7 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
         price: totalPrice,
         status: "completed",
         services_data: selectedServices,
+        ...(paymentMethod && { payment_method: paymentMethod }),
       };
 
       if (birthdayISO) appointmentData.client_birthday = birthdayISO;
@@ -321,6 +318,7 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
       setClientBirthday("");
       setStartTime("");
       setEndTime("");
+      setPaymentMethod("");
     } catch (error: any) {
       toast({
         title: "Erro ao registrar",
@@ -696,6 +694,21 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
                 : "Horários em que o cliente foi atendido"
               }
             </p>
+
+            {/* ── Payment Method ── */}
+            <div className="space-y-2">
+              <Label htmlFor="paymentMethod">Forma de Pagamento (opcional)</Label>
+              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                <SelectTrigger id="paymentMethod">
+                  <SelectValue placeholder="Selecione a forma de pagamento" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pix">Pix</SelectItem>
+                  <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                  <SelectItem value="cartao">Cartão</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
             {/* ── Actions ── */}
             <div className="flex gap-3 pt-4">

@@ -200,6 +200,7 @@ export type Database = {
           status: string
           price: number
           services_data: Json | null
+          payment_method: 'pix' | 'dinheiro' | 'cartao' | null
           created_at: string
           updated_at: string
           client_id: string | null
@@ -217,6 +218,7 @@ export type Database = {
           status?: string
           price: number
           services_data?: Json | null
+          payment_method?: 'pix' | 'dinheiro' | 'cartao' | null
           created_at?: string
           updated_at?: string
           client_id?: string | null
@@ -234,6 +236,7 @@ export type Database = {
           status?: string
           price?: number
           services_data?: Json | null
+          payment_method?: 'pix' | 'dinheiro' | 'cartao' | null
           created_at?: string
           updated_at?: string
           client_id?: string | null

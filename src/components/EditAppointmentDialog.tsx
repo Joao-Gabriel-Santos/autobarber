@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Clock, Save } from "lucide-react";
@@ -22,6 +23,7 @@ const EditAppointmentDialog = ({ appointment, open, onOpenChange, onSuccess }: E
   const [clientName, setClientName] = useState("");
   const [clientWhatsapp, setClientWhatsapp] = useState("");
   const [clientEmail, setClientEmail] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("");
 
   useEffect(() => {
     if (open && appointment) {
@@ -30,6 +32,7 @@ const EditAppointmentDialog = ({ appointment, open, onOpenChange, onSuccess }: E
       setClientName(appointment.client_name || "");
       setClientWhatsapp(appointment.client_whatsapp || "");
       setClientEmail(appointment.client_email || "");
+      setPaymentMethod(appointment.payment_method || "");
     }
   }, [open, appointment]);
 
@@ -68,6 +71,7 @@ const EditAppointmentDialog = ({ appointment, open, onOpenChange, onSuccess }: E
         end_time: endTime,
         client_name: clientName,
         client_whatsapp: clientWhatsapp,
+        ...(paymentMethod && { payment_method: paymentMethod }),
       };
 
       if (clientEmail && clientEmail.trim()) {
@@ -160,6 +164,20 @@ const EditAppointmentDialog = ({ appointment, open, onOpenChange, onSuccess }: E
                 onChange={(e) => setEndTime(e.target.value)}
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-payment-method">Forma de Pagamento (opcional)</Label>
+            <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+              <SelectTrigger id="edit-payment-method">
+                <SelectValue placeholder="Selecione a forma de pagamento" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pix">Pix</SelectItem>
+                <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                <SelectItem value="cartao">Cartão</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="flex gap-3 pt-4">
