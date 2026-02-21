@@ -48,6 +48,35 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: "bg-red-500/10 text-red-500 border-red-500/20",
 };
 
+// ── Retorna o grupo do agendamento: 0 = hoje, 1 = amanhã, 2 = futuros ──────
+function getDayGroup(dateString: string): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+
+  const date = new Date(dateString + "T00:00:00");
+
+  if (date.getTime() === today.getTime()) return 0;
+  if (date.getTime() === tomorrow.getTime()) return 1;
+  return 2;
+}
+
+// ── Ordena por grupo (hoje→amanhã→futuros) e depois por horário crescente ──
+function sortAppointments(appointments: Appointment[]): Appointment[] {
+  return [...appointments].sort((a, b) => {
+    const groupDiff = getDayGroup(a.appointment_date) - getDayGroup(b.appointment_date);
+    if (groupDiff !== 0) return groupDiff;
+
+    const dateDiff = a.appointment_date.localeCompare(b.appointment_date);
+    if (dateDiff !== 0) return dateDiff;
+
+    return a.appointment_time.localeCompare(b.appointment_time);
+  });
+}
+
+const DAY_GROUP_LABELS = ["Hoje", "Amanhã", "Próximos"];
+
 const Appointments = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -68,9 +97,19 @@ const Appointments = () => {
   const [taxaConfirmacao, setTaxaConfirmacao] = useState(0);
   const { hasFeature, getPlanName, currentPlan } = useSubscription();
 
-
   const isOwner = !permissionsLoading && permissions?.role === 'owner';
   const isBarber = !permissionsLoading && permissions?.role === 'barber';
+
+  // ── Auto-reload a cada 6 horas ────────────────────────────────────────────
+  useEffect(() => {
+    const SIX_HOURS = 6 * 60 * 60 * 1000;
+    const timer = setTimeout(() => {
+      window.location.reload();
+    }, SIX_HOURS);
+
+    return () => clearTimeout(timer);
+  }, []);
+  // ─────────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     checkUser();
@@ -80,51 +119,49 @@ const Appointments = () => {
   }, []);
 
   const loadDashboardStats = async (userId: string) => {
-      const today = new Date().toISOString().split("T")[0];
-  
-      let query = supabase
-        .from("appointments")
-        .select("status, appointment_date, price, barber_id")
-        .eq("appointment_date", today);
-  
-      if (isBarber) {
-        // Barbeiro vê apenas seus próprios agendamentos
-        query = query.eq("barber_id", userId);
-      } else if (isOwner && permissions?.ownerId) {
-        // Owner vê todos os agendamentos da equipe
-        const { data: teamMembers } = await supabase
-          .from("profiles")
-          .select("id")
-          .or(`id.eq.${userId},barbershop_id.eq.${userId}`);
-        
-        const barberIds = teamMembers?.map(m => m.id) || [userId];
-        query = query.in("barber_id", barberIds);
-      }
-  
-      const { data, error } = await query;
-  
-      if (error) {
-        console.error(error);
-        return null;
-      }
-  
-      const totalHoje = data.length;
-  
-      const receitaHoje = data
-        .filter(a => a.status === "completed")
-        .reduce((sum, a) => sum + (a.price || 0), 0);
-  
-      const taxaConfirmacao =
-        totalHoje === 0
-          ? 0
-          : Math.round(
-            (data.filter(a => a.status === "confirmed" || a.status === "completed").length /
-              totalHoje) *
-            100
-          );
-  
-      return { totalHoje, receitaHoje, taxaConfirmacao };
-    };
+    const today = new Date().toISOString().split("T")[0];
+
+    let query = supabase
+      .from("appointments")
+      .select("status, appointment_date, price, barber_id")
+      .eq("appointment_date", today);
+
+    if (isBarber) {
+      query = query.eq("barber_id", userId);
+    } else if (isOwner && permissions?.ownerId) {
+      const { data: teamMembers } = await supabase
+        .from("profiles")
+        .select("id")
+        .or(`id.eq.${userId},barbershop_id.eq.${userId}`);
+
+      const barberIds = teamMembers?.map(m => m.id) || [userId];
+      query = query.in("barber_id", barberIds);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error(error);
+      return null;
+    }
+
+    const totalHoje = data.length;
+
+    const receitaHoje = data
+      .filter(a => a.status === "completed")
+      .reduce((sum, a) => sum + (a.price || 0), 0);
+
+    const taxaConfirmacao =
+      totalHoje === 0
+        ? 0
+        : Math.round(
+          (data.filter(a => a.status === "confirmed" || a.status === "completed").length /
+            totalHoje) *
+          100
+        );
+
+    return { totalHoje, receitaHoje, taxaConfirmacao };
+  };
 
   const checkUser = async () => {
     try {
@@ -245,15 +282,13 @@ const Appointments = () => {
     setEditDialogOpen(true);
   };
 
+  // ── Filtra e ordena por status ─────────────────────────────────────────────
   const getFilteredAppointments = (status: string) =>
-    appointments.filter(apt => apt.status === status);
+    sortAppointments(appointments.filter(apt => apt.status === status));
 
-  // ── Resolve o título e os detalhes de serviços do card ────────────────────
   const resolveServiceDisplay = (appointment: Appointment) => {
     const sd = appointment.services_data;
     const hasServicesData = sd && Array.isArray(sd) && sd.length > 0;
-
-    // Múltiplos serviços: mais de 1 item OU 1 item com quantity > 1
     const isMultiple = hasServicesData && (sd.length > 1 || sd[0].quantity > 1);
 
     if (isMultiple) {
@@ -264,7 +299,6 @@ const Appointments = () => {
       };
     }
 
-    // Serviço único via services_data
     if (hasServicesData) {
       return {
         title: sd[0].service_name,
@@ -273,14 +307,41 @@ const Appointments = () => {
       };
     }
 
-    // Fallback: join com services (legado)
     return {
       title: appointment.services?.name || "Serviço",
       showDetail: false,
       items: [],
     };
   };
-  // ─────────────────────────────────────────────────────────────────────────
+
+  // ── Renderiza lista com separadores de grupo (Hoje / Amanhã / Próximos) ───
+  const renderAppointmentsWithGroups = (appointmentList: Appointment[]) => {
+    const elements: React.ReactNode[] = [];
+    let lastGroup = -1;
+
+    appointmentList.forEach((appointment) => {
+      const group = getDayGroup(appointment.appointment_date);
+
+      if (group !== lastGroup) {
+        lastGroup = group;
+        elements.push(
+          <div
+            key={`group-${group}-${appointment.appointment_date}`}
+            className="flex items-center gap-3 mt-4 mb-2 first:mt-0"
+          >
+            <span className="text-xs font-semibold uppercase tracking-widest text-primary">
+              {DAY_GROUP_LABELS[group]}
+            </span>
+            <div className="flex-1 h-px bg-border" />
+          </div>
+        );
+      }
+
+      elements.push(renderAppointmentCard(appointment));
+    });
+
+    return elements;
+  };
 
   const renderAppointmentCard = (appointment: Appointment) => {
     const { title, showDetail, items } = resolveServiceDisplay(appointment);
@@ -290,14 +351,12 @@ const Appointments = () => {
         <div className="flex items-start justify-between mb-4">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
-              {/* ── Título: só mostra "Múltiplos Serviços" quando realmente for múltiplo ── */}
               <h3 className="font-bold text-lg">{title}</h3>
               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(appointment)}>
                 <Edit className="h-4 w-4" />
               </Button>
             </div>
 
-            {/* Detalhes só aparecem quando showDetail = true */}
             {showDetail && (
               <div className="space-y-1 mb-2">
                 {items.map((svc, idx) => (
@@ -392,10 +451,9 @@ const Appointments = () => {
             </Button>
             <h1 className="text-2xl font-bold">Meus Agendamentos</h1>
 
-            {/* Entrada Direta - Disponível para todos */}
             {user && hasFeature('walk_in') && (
-              <WalkInAppointment 
-                barberId={user.id} 
+              <WalkInAppointment
+                barberId={user.id}
                 onSuccess={refreshStats}
               />
             )}
@@ -433,32 +491,32 @@ const Appointments = () => {
           </TabsList>
 
           <TabsContent value="confirmed" className="space-y-4">
-            {getFilteredAppointments("confirmed").length === 0 ? (
+            {confirmedCount === 0 ? (
               <Card className="p-12 text-center border-border bg-card">
                 <p className="text-muted-foreground">Nenhum agendamento confirmado.</p>
               </Card>
             ) : (
-              getFilteredAppointments("confirmed").map(renderAppointmentCard)
+              renderAppointmentsWithGroups(getFilteredAppointments("confirmed"))
             )}
           </TabsContent>
 
           <TabsContent value="completed" className="space-y-4">
-            {getFilteredAppointments("completed").length === 0 ? (
+            {completedCount === 0 ? (
               <Card className="p-12 text-center border-border bg-card">
                 <p className="text-muted-foreground">Nenhum agendamento concluído.</p>
               </Card>
             ) : (
-              getFilteredAppointments("completed").map(renderAppointmentCard)
+              renderAppointmentsWithGroups(getFilteredAppointments("completed"))
             )}
           </TabsContent>
 
           <TabsContent value="cancelled" className="space-y-4">
-            {getFilteredAppointments("cancelled").length === 0 ? (
+            {cancelledCount === 0 ? (
               <Card className="p-12 text-center border-border bg-card">
                 <p className="text-muted-foreground">Nenhum agendamento cancelado.</p>
               </Card>
             ) : (
-              getFilteredAppointments("cancelled").map(renderAppointmentCard)
+              renderAppointmentsWithGroups(getFilteredAppointments("cancelled"))
             )}
           </TabsContent>
         </Tabs>
