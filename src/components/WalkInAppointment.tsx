@@ -37,10 +37,13 @@ interface ExistingClient {
 
 interface WalkInProps {
   barberId: string;
+  /** ID do owner da barbearia. Usado para buscar serviços e clientes cadastrados.
+   *  Para owners, passe o próprio ID. Para barbeiros convidados, passe o barbershop_id. */
+  ownerId: string;
   onSuccess: () => void;
 }
 
-const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
+const WalkInAppointment = ({ barberId, ownerId, onSuccess }: WalkInProps) => {
   const { toast } = useToast();
   const { currentPlan } = useSubscription();
   const [open, setOpen] = useState(false);
@@ -91,23 +94,30 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
     setClientBirthday("");
   }, [clientType]);
 
+  /**
+   * Busca serviços usando `ownerId` — assim barbeiros convidados enxergam
+   * os serviços cadastrados pelo dono da barbearia.
+   */
   const loadServices = async () => {
     const { data } = await supabase
       .from("services")
       .select("*")
-      .eq("barber_id", barberId)
+      .eq("barber_id", ownerId)
       .eq("active", true);
 
     setServices(data || []);
   };
 
+  /**
+   * Busca clientes usando `ownerId` — mesma lógica dos serviços.
+   */
   const loadExistingClients = async () => {
     setLoadingClients(true);
     try {
       const { data, error } = await supabase
         .from("clients")
         .select("id, nome, whatsapp")
-        .eq("barbershop_id", barberId)
+        .eq("barbershop_id", ownerId)
         .order("nome", { ascending: true });
 
       if (error) throw error;
@@ -279,7 +289,7 @@ const WalkInAppointment = ({ barberId, onSuccess }: WalkInProps) => {
       const { totalPrice } = calculateTotals();
 
       const appointmentData: any = {
-        barber_id: barberId,
+        barber_id: barberId,          // sempre o barbeiro que está atendendo
         service_id: selectedServices[0].service_id,
         client_name: client.name,
         client_whatsapp: client.whatsapp,

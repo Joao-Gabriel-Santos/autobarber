@@ -97,6 +97,9 @@ const Appointments = () => {
   const [taxaConfirmacao, setTaxaConfirmacao] = useState(0);
   const { hasFeature, getPlanName, currentPlan } = useSubscription();
 
+  // ID do owner da barbearia — para barbeiros convidados é o barbershop_id do perfil
+  const [ownerId, setOwnerId] = useState<string>("");
+
   const isOwner = !permissionsLoading && permissions?.role === 'owner';
   const isBarber = !permissionsLoading && permissions?.role === 'barber';
 
@@ -168,6 +171,21 @@ const Appointments = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { navigate("/login"); return; }
       setUser(user);
+
+      // Resolve o ownerId: se for barbeiro convidado, usa barbershop_id do perfil
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role, barbershop_id")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      const resolvedOwnerId =
+        profile?.role === 'barber' && profile?.barbershop_id
+          ? profile.barbershop_id
+          : user.id;
+
+      setOwnerId(resolvedOwnerId);
+
       loadAppointments(user.id);
     } catch (error) {
       console.error("Error:", error);
@@ -451,9 +469,11 @@ const Appointments = () => {
             </Button>
             <h1 className="text-2xl font-bold">Meus Agendamentos</h1>
 
-            {user && hasFeature('walk_in') && (
+            {/* Passa barberId (quem atende) e ownerId (de onde vêm serviços/clientes) */}
+            {user && ownerId && hasFeature('walk_in') && (
               <WalkInAppointment
                 barberId={user.id}
+                ownerId={ownerId}
                 onSuccess={refreshStats}
               />
             )}
