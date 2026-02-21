@@ -35,6 +35,16 @@ const Dashboard = () => {
   const barberHasAdvancedAccess = isBarber && ownerPlan === 'master';
   const barberHasFinanceAccess = isBarber;
 
+  // Adicionar no início do componente Dashboard
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('refresh') === 'true') {
+    // Remove o parâmetro da URL e força reload para buscar novo plano
+    window.history.replaceState({}, '', '/dashboard');
+    window.location.reload();
+  }
+}, []);
+
   // Botão de upgrade unificado — abre o Stripe Customer Portal
   const UpgradeButton = ({ label = "Fazer Upgrade" }: { label?: string }) => (
     <Button

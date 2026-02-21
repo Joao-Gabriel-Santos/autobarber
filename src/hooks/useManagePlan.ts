@@ -30,7 +30,7 @@ export function useManagePlan() {
             "apikey": import.meta.env.VITE_SUPABASE_ANON_KEY,
           },
           body: JSON.stringify({
-            return_url: `${window.location.origin}/dashboard`,
+            return_url: `${window.location.origin}/dashboard?refresh=true`,
           }),
         }
       );
@@ -41,7 +41,6 @@ export function useManagePlan() {
         throw new Error(data.error || "Erro ao abrir portal");
       }
 
-      // Redireciona para o Stripe Customer Portal
       window.location.href = data.url;
     } catch (error: any) {
       toast({

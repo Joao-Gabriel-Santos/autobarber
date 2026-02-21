@@ -2,7 +2,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
-// Definição dos planos e suas features
 const PLAN_FEATURES = {
   basic: {
     walk_in: true,
@@ -28,7 +27,6 @@ const PLAN_FEATURES = {
     stock: false,
     product: false
   },
-  
   pro: {
     walk_in: true,
     services: true,
@@ -41,7 +39,6 @@ const PLAN_FEATURES = {
     stock: false,
     product: false
   },
-  
   master: {
     walk_in: true,
     services: true,
@@ -88,6 +85,26 @@ export function useSubscription(): UseSubscriptionReturn {
 
   useEffect(() => {
     loadSubscription();
+
+    // ✅ Recarrega quando o usuário volta para a aba (retorno do portal Stripe)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadSubscription();
+      }
+    };
+
+    // ✅ Fallback: recarrega quando a janela recupera foco
+    const handleFocus = () => {
+      loadSubscription();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, []);
 
   const loadSubscription = async () => {
@@ -102,7 +119,6 @@ export function useSubscription(): UseSubscriptionReturn {
         return;
       }
 
-      // 🔍 Verificar se é barbeiro (funcionário) ou owner
       const { data: profile } = await supabase
         .from('profiles')
         .select('role, barbershop_id')
@@ -111,13 +127,10 @@ export function useSubscription(): UseSubscriptionReturn {
 
       let ownerId = user.id;
       
-      // Se for barbeiro, buscar assinatura do owner
       if (profile?.role === 'barber' && profile.barbershop_id) {
         ownerId = profile.barbershop_id;
-        
       }
 
-      // Buscar assinatura do owner
       const { data: subData, error } = await supabase
         .from('subscriptions')
         .select('plan, status, current_period_end, cancel_at_period_end')
@@ -143,13 +156,9 @@ export function useSubscription(): UseSubscriptionReturn {
         const currentPeriodEnd = new Date(subData.current_period_end);
         const now = new Date();
         
-        // ✅ CORREÇÃO PRINCIPAL: Simplificar a lógica de verificação
-        // Se o status é 'active' ou 'trialing', considerar válido
-        // Não verificar data se status for 'active' (Stripe já gerencia isso)
         if (status === 'active' || status === 'trialing') {
           accessStatus = true;
         } else if (status === 'past_due' && currentPeriodEnd > now) {
-          // Dar tolerância para pagamentos atrasados dentro do período
           accessStatus = true;
         }
 
@@ -174,8 +183,7 @@ export function useSubscription(): UseSubscriptionReturn {
   };
 
   const hasFeature = (feature: FeatureType): boolean => {
-    const features = PLAN_FEATURES[currentPlan];
-    return features[feature] === true;
+    return PLAN_FEATURES[currentPlan][feature] === true;
   };
 
   const getPlanName = (): string => {
@@ -188,13 +196,9 @@ export function useSubscription(): UseSubscriptionReturn {
     return names[currentPlan] || 'Plano Starter';
   };
 
-  const getFeatures = () => {
-    return PLAN_FEATURES[currentPlan];
-  };
+  const getFeatures = () => PLAN_FEATURES[currentPlan];
 
-  const needsUpgrade = (feature: FeatureType): boolean => {
-    return !hasFeature(feature);
-  };
+  const needsUpgrade = (feature: FeatureType): boolean => !hasFeature(feature);
 
   const getRequiredPlan = (feature: FeatureType): PlanType | null => {
     if (PLAN_FEATURES.starter[feature]) return 'starter';
@@ -203,19 +207,11 @@ export function useSubscription(): UseSubscriptionReturn {
     return null;
   };
 
-  /**
-   * Retorna uma mensagem sugerindo upgrade para acessar uma feature
-   */
   const suggestUpgrade = (feature: FeatureType): string | null => {
-    if (hasFeature(feature)) {
-      return null; // Já tem acesso
-    }
+    if (hasFeature(feature)) return null;
 
     const requiredPlan = getRequiredPlan(feature);
-    
-    if (!requiredPlan) {
-      return null;
-    }
+    if (!requiredPlan) return null;
 
     const planNames: Record<PlanType, string> = {
       basic: 'Basic',
@@ -224,17 +220,12 @@ export function useSubscription(): UseSubscriptionReturn {
       master: 'Master',
     };
 
-    // Se está no Starter e precisa de Pro
     if (currentPlan === 'starter' && requiredPlan === 'pro') {
       return `Faça upgrade para o Plano Pro para desbloquear esta funcionalidade.`;
     }
-
-    // Se está no Starter e precisa de Master
     if (currentPlan === 'starter' && requiredPlan === 'master') {
       return `Faça upgrade para o Plano Master para desbloquear esta funcionalidade.`;
     }
-
-    // Se está no Pro e precisa de Master
     if (currentPlan === 'pro' && requiredPlan === 'master') {
       return `Faça upgrade para o Plano Master para desbloquear esta funcionalidade.`;
     }
