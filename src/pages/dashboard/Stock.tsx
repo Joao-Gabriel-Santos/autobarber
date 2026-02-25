@@ -18,8 +18,6 @@ import {
   ProductService, Product, StockMovement, StockStats, ProductFilters, Category,
 } from "@/services/prodcutService";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 const STOCK_BADGE: Record<string, { label: string; className: string }> = {
   ok:          { label: "OK",            className: "bg-green-500/10 text-green-400 border-green-500/20" },
   baixo:       { label: "Estoque Baixo", className: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" },
@@ -43,7 +41,6 @@ const defaultFilters: ProductFilters = {
   search: "", category_id: "", stock_status: "all", active: true,
 };
 
-// ─── Modal de movimentação ────────────────────────────────────────────────────
 
 interface MovementModalProps {
   product: Product;
@@ -67,7 +64,6 @@ const MovementModal = ({ product, onClose, onSuccess, userId }: MovementModalPro
       return;
     }
 
-    // Validar saída não ultrapassa estoque
     if (type === "saida" && qty > product.amount) {
       toast({ title: "Quantidade maior que o estoque disponível", variant: "destructive" });
       return;

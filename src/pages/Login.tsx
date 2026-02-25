@@ -22,7 +22,6 @@ const Login = () => {
     console.log("🔑 Senha length:", password.length);
 
     try {
-      // 🔍 VERIFICAR SE O USUÁRIO EXISTE NO BANCO
       console.log("🔍 Verificando se usuário existe...");
       
       const { data: userData, error: userCheckError } = await supabase
@@ -33,7 +32,6 @@ const Login = () => {
 
       console.log("📊 Resultado da verificação:", { userData, userCheckError });
 
-      // 🔐 TENTAR LOGIN
       console.log("🔐 Tentando autenticar...");
       
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -60,7 +58,6 @@ const Login = () => {
           stack: error.stack,
         });
 
-        // Mensagens específicas baseadas no erro
         let errorMessage = "Erro ao fazer login";
         let errorDescription = error.message;
 
@@ -107,7 +104,6 @@ const Login = () => {
     } catch (error: any) {
       console.error("💥 Erro no bloco catch:", error);
       
-      // Se já mostrou toast no bloco de erro específico, não mostrar novamente
       if (!error.message?.includes("Invalid login") && !error.message?.includes("not confirmed")) {
         toast({
           title: "Erro ao fazer login",

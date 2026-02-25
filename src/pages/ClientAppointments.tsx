@@ -71,7 +71,6 @@ const ClientAppointments = () => {
 
       const normalizedWhatsapp = phoneCheck.e164;
 
-      // Buscar todos os clientes com este WhatsApp
       const { data: clients, error: clientError } = await supabase
         .from("clients")
         .select("barbershop_id, nome")
@@ -92,14 +91,12 @@ const ClientAppointments = () => {
         return;
       }
 
-      // Se houver múltiplos clientes, usar o primeiro
       const client = clients[0];
       
       if (clients.length > 1) {
         console.warn(`⚠️ Encontrados ${clients.length} clientes com WhatsApp ${normalizedWhatsapp}. Usando o primeiro.`);
       }
 
-      // Validar que todos os parâmetros existem antes de redirecionar
       if (!client.barbershop_id || !barbershopSlug) {
         console.error("Missing parameters:", { 
           barbershop_id: client.barbershop_id, 

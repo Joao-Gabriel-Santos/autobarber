@@ -27,7 +27,6 @@ const SettingsPage = () => {
   const [uploading, setUploading] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   
-  // Estados para o editor de banner
   const [bannerZoom, setBannerZoom] = useState(100);
   const [bannerPositionX, setBannerPositionX] = useState(50);
   const [bannerPositionY, setBannerPositionY] = useState(50);
@@ -114,7 +113,6 @@ const SettingsPage = () => {
           ownerAcceptsAppointments: barbershop.owner_accepts_appointments ?? true,
         });
         
-        // Carregar configurações do banner
         if (barbershop.banner_zoom !== null && barbershop.banner_zoom !== undefined) {
           setBannerZoom(barbershop.banner_zoom);
         }
@@ -190,7 +188,6 @@ const SettingsPage = () => {
           .eq("id", user.id);
       }
 
-      // Reset banner position when uploading new banner
       if (type === 'banner') {
         setBannerZoom(100);
         setBannerPositionX(50);

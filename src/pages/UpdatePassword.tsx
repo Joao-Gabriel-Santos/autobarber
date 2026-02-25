@@ -11,7 +11,7 @@ export default function UpdatePassword() {
   const [userLoaded, setUserLoaded] = useState(false);
 
   useEffect(() => {
-    // O usuário só fica autenticado temporariamente se o Supabase validar o link
+    
     async function checkUser() {
       const { data } = await supabase.auth.getUser();
 

@@ -21,14 +21,13 @@ const PaymentSuccess = () => {
         throw new Error('ID da sessão não encontrado');
       }
 
-      // Aguardar webhook processar (3 segundos)
       await new Promise(resolve => setTimeout(resolve, 3000));
 
       setStatus('success');
 
     } catch (error: any) {
       console.error('Error:', error);
-      setStatus('success'); // Mesmo com erro, mostrar sucesso pois o pagamento foi feito
+      setStatus('success');
     }
   };
 
@@ -83,7 +82,6 @@ const PaymentSuccess = () => {
       </Card>
     </div>
   );
-  //testte
 };
 
 export default PaymentSuccess;

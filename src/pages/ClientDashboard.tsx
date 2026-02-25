@@ -1,4 +1,3 @@
-// src/pages/ClientDashboard.tsx
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -55,7 +54,6 @@ const ClientDashboard = () => {
     toast({ title: "Sessão encerrada" });
   };
 
-  // ── CANCELAMENTO DIRETO VIA SUPABASE (sem depender do ClientService) ────────
   const handleCancelAppointment = async (appointmentId: string) => {
     if (!window.confirm("Tem certeza que deseja cancelar seu agendamento?")) return;
 
@@ -76,9 +74,7 @@ const ClientDashboard = () => {
       setCancelling(false);
     }
   };
-  // ────────────────────────────────────────────────────────────────────────────
 
-  // ── REAGENDAMENTO — cancela o anterior e redireciona ────────────────────────
   const handleReschedule = async (appointmentId: string) => {
     if (!window.confirm("O agendamento atual será cancelado. Deseja continuar?")) return;
 
@@ -101,7 +97,6 @@ const ClientDashboard = () => {
       setCancelling(false);
     }
   };
-  // ────────────────────────────────────────────────────────────────────────────
 
   const safeFormatDate = (dateStr: any, formatStr: string) => {
     if (!dateStr) return "—";

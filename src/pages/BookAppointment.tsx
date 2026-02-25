@@ -371,22 +371,13 @@ const BookAppointment = () => {
     }
     return false;
   };
-
-  /**
-   * Calcula a duração real de um agendamento existente:
-   * - Se tiver services_data (múltiplos serviços), soma duration * quantity de cada item
-   * - Caso contrário, usa a duração do serviço joinado (legado)
-   * - Fallback: 30 minutos
-   */
   const getAppointmentDuration = (apt: any): number => {
-    // Agendamento com múltiplos serviços (novo formato)
     if (apt.services_data && Array.isArray(apt.services_data) && apt.services_data.length > 0) {
       const total = apt.services_data.reduce((sum: number, svc: any) => {
         return sum + ((svc.duration || 0) * (svc.quantity || 1));
       }, 0);
       if (total > 0) return total;
     }
-    // Agendamento legado (join com services)
     if (apt.services?.duration) return apt.services.duration;
     return 30;
   };
@@ -402,21 +393,18 @@ const BookAppointment = () => {
       return;
     }
 
-    // ─── CORREÇÃO: buscar services_data junto com services(duration) ───────────
     const { data: existingAppointments } = await supabase
       .from("appointments")
       .select("appointment_time, services_data, services(duration)")
       .eq("barber_id", selectedBarber.id)
       .eq("appointment_date", format(selectedDate, "yyyy-MM-dd"))
       .in("status", ["pending", "confirmed"]);
-    // ──────────────────────────────────────────────────────────────────────────
 
     const occupiedMinutes = new Set<number>();
 
     existingAppointments?.forEach((apt: any) => {
       const [hour, minute] = apt.appointment_time.split(':').map(Number);
       const startMin = hour * 60 + minute;
-      // ── Usa duração real, considerando múltiplos serviços ──
       const duration = getAppointmentDuration(apt);
 
       for (let i = 0; i < duration; i++) {

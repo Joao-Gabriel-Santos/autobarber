@@ -17,7 +17,6 @@ const ConfirmEmail = () => {
 
   const handleEmailConfirmation = async () => {
     try {
-      // Pegar tokens da URL
       const token = searchParams.get('token');
       const type = searchParams.get('type');
       
@@ -30,7 +29,6 @@ const ConfirmEmail = () => {
         return;
       }
 
-      // Verificar o token com o Supabase
       const { data, error } = await supabase.auth.verifyOtp({
         token_hash: token,
         type: type === 'signup' ? 'signup' : 'email',
@@ -49,7 +47,6 @@ const ConfirmEmail = () => {
         setStatus('success');
         setMessage('Email confirmado com sucesso!');
         
-        // Aguardar 2 segundos antes de redirecionar
         setTimeout(() => {
           navigate('/login');
         }, 2000);

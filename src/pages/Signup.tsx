@@ -60,7 +60,6 @@ const handleSignup = async (e: React.FormEvent) => {
     try {
       console.log('1. Preparando checkout sem criar usuário...');
       
-      // Validar dados antes de enviar
       if (!formData.email || !formData.password || !formData.barbershopName || !formData.barberName) {
         throw new Error("Preencha todos os campos obrigatórios");
       }
@@ -71,11 +70,10 @@ const handleSignup = async (e: React.FormEvent) => {
         throw new Error(`Price ID não configurado para o plano ${selectedPlan}`);
       }
 
-      // Criar payload com TODOS os dados do usuário no metadata
       const checkoutPayload = {
         priceId: plan.priceId,
         email: formData.email,
-        password: formData.password, // ⚠️ Será enviado de forma segura via HTTPS
+        password: formData.password,
         metadata: {
           full_name: formData.barberName,
           whatsapp: formData.whatsapp,
@@ -89,7 +87,6 @@ const handleSignup = async (e: React.FormEvent) => {
         password: '[HIDDEN]'
       });
 
-      // Criar sessão de checkout no Stripe (SEM autenticação)
       console.log('3. Invocando create-checkout...');
       
       const response = await fetch(
@@ -121,7 +118,6 @@ const handleSignup = async (e: React.FormEvent) => {
 
       console.log('5. Redirecionando para Stripe...');
       
-      // Redirecionar para Stripe Checkout
       window.location.href = checkoutData.url;
 
     } catch (error: any) {

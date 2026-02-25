@@ -165,10 +165,8 @@ const ClientAuth = () => {
         .maybeSingle();
 
       if (client) {
-        // Cliente existe, redirecionar para agendamento
         navigate(`/book/${barberSlug}?whatsapp=${encodeURIComponent(phoneCheck.e164)}`);
       } else {
-        // Cliente não existe, mostrar formulário de cadastro
         setShowRegister(true);
         setRegisterData(prev => ({ ...prev, whatsapp: loginWhatsapp }));
         toast({
@@ -206,7 +204,6 @@ const ClientAuth = () => {
       return;
     }
 
-    // Validar e converter data de nascimento se fornecida
     let birthdayISO = null;
     if (registerData.birthday) {
       birthdayISO = convertDateToISO(registerData.birthday);
@@ -223,7 +220,6 @@ const ClientAuth = () => {
     setLoading(true);
 
     try {
-      // Criar cliente
       const { data: client, error } = await supabase
         .from("clients")
         .insert({
@@ -242,7 +238,6 @@ const ClientAuth = () => {
         description: "Agora você pode fazer seu agendamento",
       });
 
-      // Redirecionar para agendamento
       navigate(`/book/${barberSlug}?whatsapp=${encodeURIComponent(phoneCheck.e164)}`);
     } catch (error: any) {
       toast({

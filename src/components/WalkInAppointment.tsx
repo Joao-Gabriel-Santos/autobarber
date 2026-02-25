@@ -37,8 +37,6 @@ interface ExistingClient {
 
 interface WalkInProps {
   barberId: string;
-  /** ID do owner da barbearia. Usado para buscar serviços e clientes cadastrados.
-   *  Para owners, passe o próprio ID. Para barbeiros convidados, passe o barbershop_id. */
   ownerId: string;
   onSuccess: () => void;
 }
@@ -52,7 +50,7 @@ const WalkInAppointment = ({ barberId, ownerId, onSuccess }: WalkInProps) => {
   const [services, setServices] = useState<Service[]>([]);
   const [selectedServices, setSelectedServices] = useState<SelectedService[]>([]);
 
-  // Client type selection
+
   const [clientType, setClientType] = useState<"existing" | "walkin">("walkin");
   const [clientAccordionOpen, setClientAccordionOpen] = useState(false);
   const [existingClients, setExistingClients] = useState<ExistingClient[]>([]);
@@ -60,7 +58,7 @@ const WalkInAppointment = ({ barberId, ownerId, onSuccess }: WalkInProps) => {
   const [selectedExistingClient, setSelectedExistingClient] = useState<ExistingClient | null>(null);
   const [loadingClients, setLoadingClients] = useState(false);
 
-  // Form fields
+  
   const [clientName, setClientName] = useState("");
   const [clientWhatsapp, setClientWhatsapp] = useState("");
   const [clientBirthday, setClientBirthday] = useState("");
@@ -85,7 +83,6 @@ const WalkInAppointment = ({ barberId, ownerId, onSuccess }: WalkInProps) => {
     }
   }, [clientType, clientAccordionOpen]);
 
-  // Reset client state when switching type
   useEffect(() => {
     setSelectedExistingClient(null);
     setClientSearch("");
@@ -94,10 +91,6 @@ const WalkInAppointment = ({ barberId, ownerId, onSuccess }: WalkInProps) => {
     setClientBirthday("");
   }, [clientType]);
 
-  /**
-   * Busca serviços usando `ownerId` — assim barbeiros convidados enxergam
-   * os serviços cadastrados pelo dono da barbearia.
-   */
   const loadServices = async () => {
     const { data } = await supabase
       .from("services")
@@ -108,9 +101,6 @@ const WalkInAppointment = ({ barberId, ownerId, onSuccess }: WalkInProps) => {
     setServices(data || []);
   };
 
-  /**
-   * Busca clientes usando `ownerId` — mesma lógica dos serviços.
-   */
   const loadExistingClients = async () => {
     setLoadingClients(true);
     try {
@@ -289,7 +279,7 @@ const WalkInAppointment = ({ barberId, ownerId, onSuccess }: WalkInProps) => {
       const { totalPrice } = calculateTotals();
 
       const appointmentData: any = {
-        barber_id: barberId,          // sempre o barbeiro que está atendendo
+        barber_id: barberId,
         service_id: selectedServices[0].service_id,
         client_name: client.name,
         client_whatsapp: client.whatsapp,
@@ -318,7 +308,6 @@ const WalkInAppointment = ({ barberId, ownerId, onSuccess }: WalkInProps) => {
       setOpen(false);
       onSuccess();
 
-      // Reset all state
       setSelectedServices([]);
       setClientType("walkin");
       setSelectedExistingClient(null);
