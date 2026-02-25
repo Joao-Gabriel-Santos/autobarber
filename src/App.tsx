@@ -25,6 +25,7 @@ import TeamManagement from "./pages/dashboard/TeamManagement";
 import AcceptInvite from "./pages/dashboard/AcceptInvite";
 import Product from "./pages/dashboard/Product";
 import Stock from "./pages/dashboard/Stock";
+import Statistics from "./pages/dashboard/statistics";
 
 // Páginas de Clientes
 import ClientsManagement from "./pages/dashboard/Clients";
@@ -49,9 +50,9 @@ const App = () => (
           <Route path="/confirm-email" element={<ConfirmEmail />} />
           <Route path="/update-password" element={<UpdatePassword />} />
           
-          {/* 🔐 Rotas de Cliente - ORDEM IMPORTANTE */}
+          
+          {/* 🔐 Rotas de Cliente*/}
           <Route path="/client-auth/:barberSlug" element={<ClientAuth />} />
-          {/* ⚠️ ADICIONAR ESTA ROTA ⚠️ */}
           <Route path="/book/:barberSlug" element={<BookAppointment />} />
           <Route path="/meus-agendamentos" element={<ClientAppointments />} />
           <Route path="/client-dashboard" element={<ClientDashboard />} />
@@ -68,6 +69,7 @@ const App = () => (
           <Route path="/dashboard/stock" element={<Stock/>} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/accept-invite/:token" element={<AcceptInvite />} />
+          <Route path="/dashboard/statistics" element={<Statistics />} />
           
           {/* Catch-all 404 */}
           <Route path="*" element={<NotFound />} />

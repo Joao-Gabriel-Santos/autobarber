@@ -447,6 +447,32 @@ useEffect(() => {
               </div>
             )}
 
+            {/* ESTATISTICAS */}
+            {isOwner && hasFeature('statistics') && (
+              <div
+                className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
+                onClick={() => navigate("/dashboard/statistics")}
+              >
+                <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                  <DollarSign className="h-6 w-6 text-primary" />
+                </div>
+                <h3 className="font-bold text-xl mb-2">Estatísticas</h3>
+                <p className="text-muted-foreground text-sm">Análise detalhada de métricas e dados</p>
+              </div>
+            )}
+            {isBarber && (
+              <div
+                className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
+                onClick={() => navigate("/dashboard/finance")}
+              >
+                <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                  <DollarSign className="h-6 w-6 text-primary" />
+                </div>
+                <h3 className="font-bold text-xl mb-2">Meu Financeiro</h3>
+                <p className="text-muted-foreground text-sm">Visualize seus ganhos e métricas</p>
+              </div>
+            )}
+
             {/* CLIENTES */}
             {isOwner && (
               <div
