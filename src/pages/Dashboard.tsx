@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Calendar, Settings, TrendingUp, LogOut, Copy, ExternalLink, DollarSign, Users, Lock, Clock, ShoppingBasket, ShoppingCart } from "lucide-react";
+import { Calendar, Settings, TrendingUp, LogOut, Copy, ExternalLink, DollarSign, Users, Lock, Clock, ShoppingBasket, ShoppingCart, ChartNoAxesCombined } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -454,7 +454,7 @@ useEffect(() => {
                 onClick={() => navigate("/dashboard/statistics")}
               >
                 <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <DollarSign className="h-6 w-6 text-primary" />
+                  <ChartNoAxesCombined className="h-6 w-6 text-primary" />
                 </div>
                 <h3 className="font-bold text-xl mb-2">Estatísticas</h3>
                 <p className="text-muted-foreground text-sm">Análise detalhada de métricas e dados</p>
@@ -463,10 +463,10 @@ useEffect(() => {
             {isBarber && (
               <div
                 className="bg-card border border-border rounded-xl p-6 hover:border-primary transition-all cursor-pointer group"
-                onClick={() => navigate("/dashboard/finance")}
+                onClick={() => navigate("/dashboard/statistics")}
               >
                 <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <DollarSign className="h-6 w-6 text-primary" />
+                  <ChartNoAxesCombined className="h-6 w-6 text-primary" />
                 </div>
                 <h3 className="font-bold text-xl mb-2">Meu Financeiro</h3>
                 <p className="text-muted-foreground text-sm">Visualize seus ganhos e métricas</p>
