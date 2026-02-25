@@ -75,7 +75,7 @@ function sortAppointments(appointments: Appointment[]): Appointment[] {
   });
 }
 
-const DAY_GROUP_LABELS = ["Hoje", "Amanhã", "Próximos"];
+const DAY_GROUP_LABELS = ["Hoje", "Amanhã", "Passados", "Próximos"];
 
 const Appointments = () => {
   const navigate = useNavigate();
@@ -97,13 +97,11 @@ const Appointments = () => {
   const [taxaConfirmacao, setTaxaConfirmacao] = useState(0);
   const { hasFeature, getPlanName, currentPlan } = useSubscription();
 
-  // ID do owner da barbearia — para barbeiros convidados é o barbershop_id do perfil
   const [ownerId, setOwnerId] = useState<string>("");
 
   const isOwner = !permissionsLoading && permissions?.role === 'owner';
   const isBarber = !permissionsLoading && permissions?.role === 'barber';
 
-  // ── Auto-reload a cada 6 horas ────────────────────────────────────────────
   useEffect(() => {
     const SIX_HOURS = 6 * 60 * 60 * 1000;
     const timer = setTimeout(() => {
@@ -112,7 +110,6 @@ const Appointments = () => {
 
     return () => clearTimeout(timer);
   }, []);
-  // ─────────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     checkUser();
@@ -172,7 +169,6 @@ const Appointments = () => {
       if (!user) { navigate("/login"); return; }
       setUser(user);
 
-      // Resolve o ownerId: se for barbeiro convidado, usa barbershop_id do perfil
       const { data: profile } = await supabase
         .from("profiles")
         .select("role, barbershop_id")
@@ -300,7 +296,6 @@ const Appointments = () => {
     setEditDialogOpen(true);
   };
 
-  // ── Filtra e ordena por status ─────────────────────────────────────────────
   const getFilteredAppointments = (status: string) =>
     sortAppointments(appointments.filter(apt => apt.status === status));
 
@@ -332,7 +327,6 @@ const Appointments = () => {
     };
   };
 
-  // ── Renderiza lista com separadores de grupo (Hoje / Amanhã / Próximos) ───
   const renderAppointmentsWithGroups = (appointmentList: Appointment[]) => {
     const elements: React.ReactNode[] = [];
     let lastGroup = -1;
