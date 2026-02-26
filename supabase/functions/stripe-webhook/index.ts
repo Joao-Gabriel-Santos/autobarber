@@ -18,6 +18,31 @@ const supabaseAdmin = createClient(
   }
 );
 
+// ===================================
+// 🔧 Helper: extrai o nome do plano a partir dos items da subscription
+// ===================================
+function extractPlanFromSubscription(subscription: Stripe.Subscription): string | null {
+  try {
+    const item = subscription.items?.data?.[0];
+    if (!item) return null;
+
+    // Tenta pelo metadata do price
+    const priceMetadata = item.price?.metadata;
+    if (priceMetadata?.plan) return priceMetadata.plan.toLowerCase();
+
+    // Tenta pelo metadata do product
+    const productMetadata = (item.price?.product as Stripe.Product)?.metadata;
+    if (productMetadata?.plan) return productMetadata.plan.toLowerCase();
+
+    // Tenta pelo nickname do price
+    if (item.price?.nickname) return item.price.nickname.toLowerCase();
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 serve(async (req) => {
   const signature = req.headers.get("stripe-signature");
 
@@ -35,6 +60,122 @@ serve(async (req) => {
 
     console.log("📦 Evento recebido:", event.type);
 
+    // ===================================
+    // ✅ NOVO: Atualiza plano/status quando subscription muda
+    // Cobre: upgrade, downgrade, renovação, cancelamento agendado
+    // ===================================
+    if (
+      event.type === "customer.subscription.updated" ||
+      event.type === "customer.subscription.deleted"
+    ) {
+      const subscription = event.data.object as Stripe.Subscription;
+
+      console.log("🔄 Subscription event:", {
+        id: subscription.id,
+        status: subscription.status,
+        cancel_at_period_end: subscription.cancel_at_period_end,
+        customer: subscription.customer,
+      });
+
+      // Busca o plano nos items da subscription
+      // Se não achar, expande o product para pegar o metadata
+      let planName: string | null = extractPlanFromSubscription(subscription);
+
+      if (!planName) {
+        // Tenta expandir buscando a subscription completa com product expandido
+        try {
+          const fullSub = await stripe.subscriptions.retrieve(subscription.id, {
+            expand: ["items.data.price.product"],
+          });
+          planName = extractPlanFromSubscription(fullSub);
+        } catch (e) {
+          console.error("⚠️ Erro ao expandir subscription:", e);
+        }
+      }
+
+      console.log("📋 Plano detectado:", planName);
+
+      // Monta os dados para atualizar no banco
+      const updateData: Record<string, any> = {
+        status: subscription.status,
+        current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
+        current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+        cancel_at_period_end: subscription.cancel_at_period_end,
+      };
+
+      // Só atualiza o plano se conseguiu identificar
+      if (planName) {
+        updateData.plan = planName;
+      }
+
+      const { error: updateError } = await supabaseAdmin
+        .from("subscriptions")
+        .update(updateData)
+        .eq("stripe_subscription_id", subscription.id);
+
+      if (updateError) {
+        console.error("❌ Erro ao atualizar subscription no banco:", updateError);
+        throw updateError;
+      }
+
+      console.log(`✅ Subscription atualizada — plano: ${planName ?? "sem alteração"}, status: ${subscription.status}`);
+
+      return new Response(JSON.stringify({ received: true }), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
+    // ===================================
+    // ✅ NOVO: Atualiza status em pagamentos
+    // ===================================
+    if (event.type === "invoice.payment_succeeded") {
+      const invoice = event.data.object as Stripe.Invoice;
+
+      if (invoice.subscription) {
+        const { error } = await supabaseAdmin
+          .from("subscriptions")
+          .update({ status: "active" })
+          .eq("stripe_subscription_id", invoice.subscription as string);
+
+        if (error) {
+          console.error("⚠️ Erro ao ativar subscription após pagamento:", error);
+        } else {
+          console.log("✅ Subscription ativada após pagamento bem-sucedido");
+        }
+      }
+
+      return new Response(JSON.stringify({ received: true }), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
+    if (event.type === "invoice.payment_failed") {
+      const invoice = event.data.object as Stripe.Invoice;
+
+      if (invoice.subscription) {
+        const { error } = await supabaseAdmin
+          .from("subscriptions")
+          .update({ status: "past_due" })
+          .eq("stripe_subscription_id", invoice.subscription as string);
+
+        if (error) {
+          console.error("⚠️ Erro ao marcar subscription como past_due:", error);
+        } else {
+          console.log("⚠️ Subscription marcada como past_due");
+        }
+      }
+
+      return new Response(JSON.stringify({ received: true }), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
+    // ===================================
+    // checkout.session.completed — criação de novo usuário
+    // ===================================
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
 
@@ -55,9 +196,6 @@ serve(async (req) => {
         throw new Error("Email ou senha ausentes no metadata");
       }
 
-      // ===================================
-      // 🔥 ESTRATÉGIA: Criar usuário SEM triggers
-      // ===================================
       console.log("🔍 Buscando usuário existente...");
       const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
       let user = existingUsers?.users.find((u) => u.email === email);
@@ -67,8 +205,7 @@ serve(async (req) => {
       } else {
         console.log("📝 Tentando criar usuário...");
 
-        // Tentativa 1: Criar normalmente
-        const { data: newUserData, error: createError } = 
+        const { data: newUserData, error: createError } =
           await supabaseAdmin.auth.admin.createUser({
             email,
             password,
@@ -86,16 +223,13 @@ serve(async (req) => {
             code: createError.code,
           });
 
-          // 🔥 FALLBACK: Se falhar por problema de trigger/DB, 
-          // criar DIRETO no banco auth.users (último recurso)
           if (createError.message.includes("Database error")) {
             console.log("🚨 Tentando criar usuário DIRETO no banco...");
-            
-            // Gerar ID e hash de senha
+
             const userId = crypto.randomUUID();
             const passwordHash = await hashPassword(password);
-            
-            const { data: directUser, error: directError } = await supabaseAdmin
+
+            const { error: directError } = await supabaseAdmin
               .from("auth.users")
               .insert({
                 id: userId,
@@ -128,9 +262,6 @@ serve(async (req) => {
         }
       }
 
-      // ===================================
-      // CRIAR PROFILE (com tolerância a falhas)
-      // ===================================
       console.log("📄 Criando profile...");
       try {
         const { error: profileError } = await supabaseAdmin
@@ -154,9 +285,6 @@ serve(async (req) => {
         console.error("⚠️ Exceção no profile (continuando):", profileEx.message);
       }
 
-      // ===================================
-      // CRIAR BARBERSHOP (com tolerância a falhas)
-      // ===================================
       console.log("🏪 Criando barbearia...");
       try {
         const { error: barbershopError } = await supabaseAdmin
@@ -178,11 +306,8 @@ serve(async (req) => {
         console.error("⚠️ Exceção na barbearia (continuando):", barbershopEx.message);
       }
 
-      // ===================================
-      // CRIAR SUBSCRIPTION (CRÍTICO - NÃO pode falhar)
-      // ===================================
       console.log("💰 Criando subscription...");
-      
+
       const subscriptionData = {
         user_id: user.id,
         stripe_customer_id: session.customer as string,
@@ -233,11 +358,10 @@ serve(async (req) => {
   }
 });
 
-// Helper para hash de senha (fallback)
 async function hashPassword(password: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(password);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }

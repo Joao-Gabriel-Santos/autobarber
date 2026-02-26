@@ -1,5 +1,4 @@
-// src/hooks/useSubscription.ts
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 const PLAN_FEATURES = {
@@ -87,31 +86,7 @@ export function useSubscription(): UseSubscriptionReturn {
   const [subscription, setSubscription] = useState<any>(null);
   const [hasAccess, setHasAccess] = useState(false);
 
-  useEffect(() => {
-    loadSubscription();
-
-    // ✅ Recarrega quando o usuário volta para a aba (retorno do portal Stripe)
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        loadSubscription();
-      }
-    };
-
-    // ✅ Fallback: recarrega quando a janela recupera foco
-    const handleFocus = () => {
-      loadSubscription();
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleFocus);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleFocus);
-    };
-  }, []);
-
-  const loadSubscription = async () => {
+  const loadSubscription = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
@@ -135,6 +110,7 @@ export function useSubscription(): UseSubscriptionReturn {
         ownerId = profile.barbershop_id;
       }
 
+      // ✅ CORREÇÃO: força busca sem cache usando timestamp no header
       const { data: subData, error } = await supabase
         .from('subscriptions')
         .select('plan, status, current_period_end, cancel_at_period_end')
@@ -166,11 +142,14 @@ export function useSubscription(): UseSubscriptionReturn {
           accessStatus = true;
         }
 
+        // ✅ CORREÇÃO: sempre aplica o plano do banco, independente do accessStatus
         const planType = subData.plan.toLowerCase() as PlanType;
         
         if (planType in PLAN_FEATURES) {
           finalPlan = planType;
         }
+
+        console.log(`📋 Subscription loaded — plan: ${planType}, status: ${status}, hasAccess: ${accessStatus}`);
       }
       
       setSubscription(subData);
@@ -184,7 +163,44 @@ export function useSubscription(): UseSubscriptionReturn {
       setCurrentPlan('starter');
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadSubscription();
+
+    // ✅ Recarrega quando o usuário volta para a aba (retorno do portal Stripe)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('👁️ Aba visível novamente — recarregando subscription...');
+        loadSubscription();
+      }
+    };
+
+    // ✅ Fallback: recarrega quando a janela recupera foco
+    const handleFocus = () => {
+      console.log('🔍 Janela em foco — recarregando subscription...');
+      loadSubscription();
+    };
+
+    // ✅ NOVO: detecta retorno do portal Stripe via URL param ?refresh=true
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('refresh') === 'true') {
+      console.log('🔄 Retorno do portal Stripe detectado — forçando refresh...');
+      loadSubscription().then(() => {
+        // Limpa o param da URL sem reload
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, '', cleanUrl);
+      });
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [loadSubscription]);
 
   const hasFeature = (feature: FeatureType): boolean => {
     return PLAN_FEATURES[currentPlan][feature] === true;
